@@ -2,7 +2,8 @@
 //
 // It renders differently depending on the lookup status:
 //   loading      -> a muted "…" while we wait on the background worker
-//   ok           -> ★rating · difficulty, color-coded green/yellow/red
+//   ok           -> ★rating · GPA, color-coded green/yellow/red by rating
+//   (GPA only)   -> a neutral "X.XX GPA" pill when grade data exists but no RMP match
 //   no_match /   -> a faint neutral "?" (we won't guess on the wrong professor)
 //   ambiguous
 //   fetch_failed -> a faint "!" so it's distinguishable in debug, but quiet
@@ -17,6 +18,16 @@ function colorFor(overall) {
   if (overall === undefined) return '#9ca3af';
   if (overall >= 4) return '#16a34a';
   if (overall >= 3) return '#ca8a04';
+  return '#dc2626';
+}
+
+/**
+ * Color a standalone GPA pill (higher GPA = greener).
+ * @param {number} gpa
+ */
+function gpaColor(gpa) {
+  if (gpa >= 3.3) return '#16a34a';
+  if (gpa >= 2.7) return '#ca8a04';
   return '#dc2626';
 }
 
@@ -50,17 +61,32 @@ export function createBadge(result) {
     return pill;
   }
 
-  if (status === 'ok' && result.overall !== undefined) {
-    const diff = result.difficulty !== undefined ? ` · ${result.difficulty.toFixed(1)}` : '';
+  const hasRating = typeof result?.overall === 'number';
+  const hasGpa = typeof result?.gpa === 'number';
+
+  if (hasRating) {
+    // Primary case: RMP rating + (course GPA in place of difficulty).
+    const gpaPart = hasGpa ? ` · ${result.gpa.toFixed(2)} GPA` : '';
     Object.assign(pill.style, { background: colorFor(result.overall), color: '#fff', cursor: 'pointer' });
-    pill.textContent = `★ ${result.overall.toFixed(1)}${diff}`;
+    pill.textContent = `★ ${result.overall.toFixed(1)}${gpaPart}`;
 
     const wta = result.detail?.wouldTakeAgainPct;
     pill.title =
       `RateMyProfessors: ${result.overall.toFixed(1)}/5` +
+      (hasGpa ? `, avg GPA ${result.gpa.toFixed(2)}` : '') +
       (result.difficulty !== undefined ? `, difficulty ${result.difficulty.toFixed(1)}/5` : '') +
       (wta !== undefined ? `, ${wta}% would take again` : '') +
       (result.sampleSize ? ` (${result.sampleSize} ratings)` : '');
+    return pill;
+  }
+
+  if (hasGpa) {
+    // We have grade data but no confident RMP rating — still useful on its own.
+    Object.assign(pill.style, { background: gpaColor(result.gpa), color: '#fff', cursor: 'pointer' });
+    pill.textContent = `${result.gpa.toFixed(2)} GPA`;
+    pill.title = `Average GPA ${result.gpa.toFixed(2)} for this course` +
+      (result.gpaSampleSize ? ` (${result.gpaSampleSize} sections)` : '') +
+      ' — no confident RateMyProfessors match.';
     return pill;
   }
 

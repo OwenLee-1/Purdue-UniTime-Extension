@@ -45,6 +45,50 @@ clearBtn.addEventListener('click', async () => {
   setStatus(`Cleared ${keys.length} cached rating${keys.length === 1 ? '' : 's'}`);
 });
 
+// --- Calendar export helper ---
+// UniTime gives each student a personal, login-protected iCalendar URL. We can't
+// generate it for them, but once they paste it we turn it into one-click
+// "subscribe" links for Google and Apple/Outlook (which both accept webcal://).
+const icalInput = document.getElementById('icalUrl');
+const addGoogleBtn = document.getElementById('addGoogle');
+const addAppleBtn = document.getElementById('addApple');
+const calStatusEl = document.getElementById('calStatus');
+
+chrome.storage.local.get(['icalUrl']).then((s) => {
+  if (s.icalUrl) icalInput.value = s.icalUrl;
+});
+
+icalInput.addEventListener('change', () => {
+  chrome.storage.local.set({ icalUrl: icalInput.value.trim() });
+});
+
+function readIcalUrl() {
+  const v = icalInput.value.trim();
+  if (!/^(https?|webcal):\/\//i.test(v)) {
+    calStatusEl.textContent = 'Paste your UniTime iCal URL first.';
+    return null;
+  }
+  calStatusEl.textContent = '';
+  return v;
+}
+
+function toWebcal(url) {
+  return url.replace(/^https?:\/\//i, 'webcal://');
+}
+
+addGoogleBtn.addEventListener('click', () => {
+  const url = readIcalUrl();
+  if (!url) return;
+  window.open(`https://calendar.google.com/calendar/r?cid=${encodeURIComponent(toWebcal(url))}`, '_blank');
+});
+
+addAppleBtn.addEventListener('click', () => {
+  const url = readIcalUrl();
+  if (!url) return;
+  // webcal:// hands off to the OS calendar app (Apple Calendar, Outlook, etc.).
+  window.open(toWebcal(url), '_blank');
+});
+
 // Prefill a basic report (no backend yet — opens an email draft).
 reportLink.addEventListener('click', (e) => {
   e.preventDefault();

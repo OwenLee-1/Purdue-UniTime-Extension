@@ -45,13 +45,19 @@ async function boot() {
     chrome.runtime.sendMessage(
       {
         type: 'LOOKUP_PROFESSOR',
-        query: { rawName: candidate.text, school: 'purdue' },
+        query: { rawName: candidate.text, school: 'purdue', course: candidate.courseContext },
       },
       (response) => {
         const result = chrome.runtime.lastError || !response?.ok ? { status: 'fetch_failed' } : response.result;
         if (debug) console.log('[Purdue RMP] result for', candidate.text, result);
-        badge.setResult(result);
-        setEntryResult(entry, result);
+        // Carry the UniTime name + course so the hover card always has context,
+        // even when there's no RMP match (GPA-only).
+        const enriched =
+          result && typeof result === 'object'
+            ? { ...result, displayName: candidate.text, course: candidate.courseContext }
+            : result;
+        badge.setResult(enriched);
+        setEntryResult(entry, enriched);
       }
     );
   });

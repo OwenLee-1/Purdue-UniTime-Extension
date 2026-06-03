@@ -68,6 +68,22 @@
 
     <hr />
 
+    <label style="font-size: 13px; font-weight: 600;">Add schedule to your calendar</label>
+    <p class="hint">In UniTime: Personal Schedule → Export → "Copy iCalendar URL", then paste it below.</p>
+    <input
+      type="text"
+      id="icalUrl"
+      placeholder="Paste UniTime iCalendar URL"
+      style="width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 12px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 6px;"
+    />
+    <div style="display: flex; gap: 6px;">
+      <button id="addGoogle" style="flex: 1;">Google</button>
+      <button id="addApple" style="flex: 1;">Apple / Outlook</button>
+    </div>
+    <div id="calStatus" class="hint" style="text-align: center;"></div>
+
+    <hr />
+
     <button id="clearCache">Clear cached ratings</button>
     <div id="status"></div>
 

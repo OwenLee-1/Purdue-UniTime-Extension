@@ -16,6 +16,7 @@
  * @typedef {Object} ProfessorQuery
  * @property {string} rawName    The instructor text exactly as UniTime shows it.
  * @property {string} [department] Department, if we can derive it from the course.
+ * @property {string} [course]   Course code like "MA 26100" — needed for course-specific GPA.
  * @property {"purdue"} school   Hardcoded for v1; the field exists so multi-school is easy later.
  */
 
@@ -28,6 +29,8 @@
  * @property {number} [overall]     Overall star rating.
  * @property {number} [difficulty]  Difficulty rating.
  * @property {number} [sampleSize]  Number of ratings (a trust signal).
+ * @property {number} [gpa]         Average GPA for this course+instructor (from grade data).
+ * @property {number} [gpaSampleSize]  How many sections that GPA averages over.
  * @property {ProviderDetail} [detail]  Extra info shown in the hover card.
  */
 

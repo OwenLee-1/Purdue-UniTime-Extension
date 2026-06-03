@@ -48,32 +48,46 @@ export function createPopover(result) {
     pointerEvents: 'auto',
   });
 
-  // Header: name + department.
+  // Header: name + (course · department) context.
   const header = document.createElement('div');
   header.style.marginBottom = '6px';
   const name = document.createElement('div');
-  name.textContent = detail.name || 'Professor';
+  name.textContent = detail.name || result.displayName || 'Professor';
   Object.assign(name.style, { fontWeight: '700', fontSize: '13px' });
   header.appendChild(name);
-  if (detail.department) {
-    const dept = document.createElement('div');
-    dept.textContent = detail.department;
-    Object.assign(dept.style, { color: '#9ca3af', fontSize: '11px' });
-    header.appendChild(dept);
+
+  const subParts = [];
+  if (result.course) subParts.push(result.course);
+  if (detail.department) subParts.push(detail.department);
+  if (subParts.length) {
+    const sub = document.createElement('div');
+    sub.textContent = subParts.join(' · ');
+    Object.assign(sub.style, { color: '#9ca3af', fontSize: '11px' });
+    header.appendChild(sub);
   }
   card.appendChild(header);
 
-  // Big rating line.
-  const ratingLine = document.createElement('div');
-  Object.assign(ratingLine.style, {
+  const hasRating = typeof result.overall === 'number';
+
+  // Headline: the RMP rating if we have it, otherwise lead with GPA.
+  const headline = document.createElement('div');
+  Object.assign(headline.style, {
     fontSize: '18px',
     fontWeight: '800',
-    color: colorFor(result.overall),
+    color: hasRating ? colorFor(result.overall) : '#f9fafb',
     margin: '2px 0 6px',
   });
-  ratingLine.textContent = `★ ${result.overall?.toFixed(1) ?? '—'} / 5`;
-  card.appendChild(ratingLine);
+  headline.textContent = hasRating
+    ? `★ ${result.overall.toFixed(1)} / 5`
+    : typeof result.gpa === 'number'
+      ? `${result.gpa.toFixed(2)} avg GPA`
+      : '—';
+  card.appendChild(headline);
 
+  if (typeof result.gpa === 'number') {
+    const n = result.gpaSampleSize ? ` (${result.gpaSampleSize} sections)` : '';
+    card.appendChild(row('Avg GPA (this course)', `${result.gpa.toFixed(2)}${n}`));
+  }
   if (result.difficulty !== undefined) card.appendChild(row('Difficulty', `${result.difficulty.toFixed(1)} / 5`));
   if (detail.wouldTakeAgainPct !== undefined) card.appendChild(row('Would take again', `${detail.wouldTakeAgainPct}%`));
   if (result.sampleSize !== undefined) card.appendChild(row('Ratings', String(result.sampleSize)));
