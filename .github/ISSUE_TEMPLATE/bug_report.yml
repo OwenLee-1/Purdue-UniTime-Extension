@@ -1,0 +1,69 @@
+name: Bug report / wrong match
+description: Report a wrong professor match, a missing rating, or anything broken.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing! The more specific you are, the faster this gets fixed.
+        Most reports are about a **wrong or missing professor match**, so the first
+        two fields matter most.
+  - type: input
+    id: course
+    attributes:
+      label: Course + section
+      description: As shown in UniTime.
+      placeholder: "e.g. MA 26100, section 001"
+    validations:
+      required: true
+  - type: input
+    id: instructor
+    attributes:
+      label: Instructor name (exactly as UniTime shows it)
+      placeholder: "e.g. Weng, Shuyi"
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What did you see?
+      placeholder: "e.g. GPA only and no star / wrong professor's rating / no badge at all"
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to see?
+      placeholder: "e.g. The RateMyProfessors star rating for this instructor"
+    validations:
+      required: false
+  - type: dropdown
+    id: browser
+    attributes:
+      label: Browser
+      options:
+        - Chrome
+        - Edge
+        - Brave
+        - Other Chromium browser
+    validations:
+      required: false
+  - type: textarea
+    id: console
+    attributes:
+      label: Debug console output (optional but very helpful)
+      description: >
+        Turn on **Debug mode** in the extension popup, open Chrome DevTools
+        (View → Developer → JavaScript Console), reload the page, and paste any
+        lines that start with `[Purdue RMP]` for this professor.
+      render: text
+    validations:
+      required: false
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots (optional)
+      description: Drag an image here if it helps show the problem.
+    validations:
+      required: false
