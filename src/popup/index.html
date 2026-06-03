@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Purdue RMP</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        width: 268px;
+        margin: 0;
+        padding: 14px 16px;
+        color: #111827;
+      }
+      h1 {
+        font-size: 15px;
+        margin: 0 0 2px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .sub { font-size: 11px; color: #6b7280; margin: 0 0 12px; }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 10px 0;
+      }
+      label { font-size: 13px; }
+      .hint { font-size: 11px; color: #9ca3af; margin: 2px 0 0; }
+      hr { border: none; border-top: 1px solid #e5e7eb; margin: 12px 0; }
+      button {
+        width: 100%;
+        padding: 7px 10px;
+        font-size: 13px;
+        font-family: inherit;
+        border: 1px solid #d1d5db;
+        border-radius: 7px;
+        background: #f9fafb;
+        cursor: pointer;
+      }
+      button:hover { background: #f3f4f6; }
+      #status { font-size: 11px; color: #16a34a; min-height: 14px; margin-top: 6px; text-align: center; }
+      a { color: #2563eb; font-size: 11px; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .footer { margin-top: 12px; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <h1>★ Purdue RMP</h1>
+    <p class="sub">Inline RateMyProfessors ratings on UniTime</p>
+
+    <div class="row">
+      <label for="enabled">Show ratings</label>
+      <input type="checkbox" id="enabled" checked />
+    </div>
+
+    <div class="row">
+      <label for="hideOverlay">Hide UniTime schedule preview</label>
+      <input type="checkbox" id="hideOverlay" />
+    </div>
+    <p class="hint">Hides the weekly grid that pops up when you hover a class.</p>
+
+    <div class="row">
+      <label for="debug">Debug mode</label>
+      <input type="checkbox" id="debug" />
+    </div>
+
+    <hr />
+
+    <button id="clearCache">Clear cached ratings</button>
+    <div id="status"></div>
+
+    <div class="footer">
+      <a id="reportLink" href="#" target="_blank" rel="noopener noreferrer">Report a wrong match</a>
+    </div>
+
+    <script type="module" src="./popup.js"></script>
+  </body>
+</html>

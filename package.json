@@ -1,0 +1,16 @@
+{
+  "name": "purdue-rmp-extension",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Chrome extension that overlays RateMyProfessors ratings inline on Purdue's UniTime scheduling site.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "devDependencies": {
+    "@crxjs/vite-plugin": "^2.0.0",
+    "vite": "^6.4.3"
+  }
+}
