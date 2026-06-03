@@ -21,7 +21,7 @@ one-click "Add to Google / Apple / Outlook" links.
 
 ## Installation - Alpha Testing
 
-1. Download the alpha build (`purdue-rmp-extension-alpha-*.zip`) and **unzip** it.
+1. Download the alpha build zip file inside "alpha" folder and **unzip** it.
 2. Go to `chrome://extensions` in Chrome.
 3. Turn on **Developer mode** (top-right toggle).
 4. Click **Load unpacked** and select the unzipped folder.
