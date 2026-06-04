@@ -1,4 +1,4 @@
-``# BoilerClassPlan — Inline Course Prep
+## BoilerClassPlan — Inline Course Prep
 
 Rev A: A Chrome extension that give professor data alongside each professor shown in the UniTime portal for ease of life. Displays RateMyProfessor ratings and Average Course GPA, pulling from RateMyProfessor and BoilerCourses respectively. 
 
