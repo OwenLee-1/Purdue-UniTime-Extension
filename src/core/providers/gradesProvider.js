@@ -7,6 +7,7 @@
 
 import { RatingProvider } from './Provider.js';
 import { normalizeName } from '../matching.js';
+import { normalizeCourseKey } from '../courseKey.js';
 import { GRADES } from './gradesData.js';
 
 /**
@@ -59,9 +60,10 @@ export class GradesProvider extends RatingProvider {
    * @returns {Promise<import('./Provider.js').ProviderResult>}
    */
   async lookup(query) {
-    if (!query.course) return { source: 'grades', confidence: 0, status: 'no_match' };
+    const courseKey = normalizeCourseKey(query.course);
+    if (!courseKey) return { source: 'grades', confidence: 0, status: 'no_match' };
 
-    const byCourse = GRADES[query.course];
+    const byCourse = GRADES[courseKey];
     if (!byCourse) return { source: 'grades', confidence: 0, status: 'no_match' };
 
     const { last, isPlaceholder } = normalizeName(query.rawName);
@@ -89,6 +91,7 @@ export class GradesProvider extends RatingProvider {
       status: 'ok',
       gpa: rec.gpa,
       gpaSampleSize: rec.n,
+      gpaDistribution: rec.dist,
     };
   }
 }

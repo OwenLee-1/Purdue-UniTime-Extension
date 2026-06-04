@@ -1,12 +1,15 @@
 // Multi-section comparison (milestone M5).
 //
 // When the same course (e.g. "MA 26100") is taught by several professors, this
-// module highlights the highest-rated option so a student can pick at a glance.
+// module highlights the best option so a student can pick at a glance. "Best" uses
+// the composite score (RMP + would-take-again + course GPA) when available.
 // We group detected rows by course, and each time a rating arrives we re-evaluate
 // the group and move the "Best" marker / row highlight to the current winner(s).
 //
 // We only mark a winner when there are at least two rated sections AND they don't
 // all share the same rating (otherwise "best" would be meaningless).
+
+import { sectionCompareScore } from '../core/compositeScore.js';
 
 const groups = new Map();
 
@@ -47,24 +50,40 @@ export function setEntryResult(entry, result) {
   if (entry.group) reevaluate(entry.group);
 }
 
+/**
+ * Remove an entry (e.g. when the user hides this professor).
+ * @param {CompareEntry} entry
+ */
+export function removeFromComparison(entry) {
+  const group = entry?.group;
+  if (!group) return;
+  group.entries = group.entries.filter((e) => e !== entry);
+  entry.group = undefined;
+  reevaluate(group);
+}
+
 function reevaluate(group) {
   // Drop entries whose rows were removed by a GWT re-render.
   group.entries = group.entries.filter((e) => e.rowElement && e.rowElement.isConnected);
 
-  const rated = group.entries.filter((e) => e.result?.status === 'ok' && typeof e.result.overall === 'number');
+  const rated = group.entries.filter((e) => {
+    if (e.blocked) return false;
+    if (e.result?.status !== 'ok') return false;
+    return sectionCompareScore(e.result) != null;
+  });
 
   // Clear any existing markers first.
   for (const e of group.entries) clearBest(e);
 
   if (rated.length < 2) return;
 
-  const ratings = rated.map((e) => e.result.overall);
-  const max = Math.max(...ratings);
-  const min = Math.min(...ratings);
+  const scores = rated.map((e) => sectionCompareScore(e.result));
+  const max = Math.max(...scores);
+  const min = Math.min(...scores);
   if (max <= min) return; // all equal → no meaningful "best"
 
   for (const e of rated) {
-    if (e.result.overall === max) markBest(e);
+    if (sectionCompareScore(e.result) === max) markBest(e);
   }
 }
 
@@ -81,6 +100,10 @@ function markBest(entry) {
     const chip = document.createElement('span');
     chip.className = CHIP_CLASS;
     chip.textContent = '✓ Best';
+    const score = sectionCompareScore(entry.result);
+    if (score != null) {
+      chip.title = `Highest composite/compare score in this course (${score.toFixed(2)})`;
+    }
     Object.assign(chip.style, {
       marginLeft: '6px',
       padding: '1px 6px',

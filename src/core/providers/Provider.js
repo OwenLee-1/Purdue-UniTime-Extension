@@ -31,6 +31,9 @@
  * @property {number} [sampleSize]  Number of ratings (a trust signal).
  * @property {number} [gpa]         Average GPA for this course+instructor (from grade data).
  * @property {number} [gpaSampleSize]  How many sections that GPA averages over.
+ * @property {{A:number,B:number,C:number,D:number,F:number}} [gpaDistribution]  Avg letter-grade %.
+ * @property {{ score: number, parts: import('../compositeScore.js').CompositePart[] }} [composite]
+ * @property {{ avg: number, count: number, tone: string, positivePct: number }} [reviewSentiment]
  * @property {ProviderDetail} [detail]  Extra info shown in the hover card.
  */
 
@@ -39,8 +42,17 @@
  * @typedef {Object} ProviderDetail
  * @property {number} [wouldTakeAgainPct]
  * @property {string[]} [tags]
- * @property {string[]} [reviewSnippets]
+ * @property {ReviewSnippet[]} [reviews]
  * @property {string} [profileUrl]
+ */
+
+/**
+ * A single RateMyProfessors review shown in the hover card.
+ * @typedef {Object} ReviewSnippet
+ * @property {string} comment
+ * @property {string} [class]
+ * @property {number} [quality]     1..5
+ * @property {number} [difficulty]  1..5
  */
 
 /**

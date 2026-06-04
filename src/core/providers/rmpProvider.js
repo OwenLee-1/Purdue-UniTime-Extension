@@ -38,11 +38,46 @@ const TEACHER_SEARCH_QUERY = `query TeacherSearch($text: String!, $schoolID: ID!
             tagName
             tagCount
           }
+          ratings(first: 4) {
+            edges {
+              node {
+                comment
+                class
+                date
+                qualityRating
+                difficultyRatingRounded
+              }
+            }
+          }
         }
       }
     }
   }
 }`;
+
+/**
+ * Pull review snippets from an RMP teacher node.
+ * @param {object} candidate
+ * @returns {import('./Provider.js').ReviewSnippet[]}
+ */
+function extractReviews(candidate) {
+  return (candidate.ratings?.edges || [])
+    .map((e) => e.node)
+    .filter((n) => n && String(n.comment || '').trim())
+    .slice(0, 3)
+    .map((n) => ({
+      comment: String(n.comment).trim(),
+      class: n.class || undefined,
+      quality: toNum(n.qualityRating),
+      difficulty: toNum(n.difficultyRatingRounded),
+    }));
+}
+
+/** @param {*} v */
+function toNum(v) {
+  const n = typeof v === 'number' ? v : parseFloat(v);
+  return Number.isFinite(n) ? n : undefined;
+}
 
 export class RmpProvider extends RatingProvider {
   constructor() {
@@ -63,18 +98,57 @@ export class RmpProvider extends RatingProvider {
       return { source: 'rmp', confidence: 0, status: 'no_match' };
     }
 
-    let candidates;
+    const searchTerms = [name.last];
+    if (name.first && name.first.length >= 2) {
+      searchTerms.unshift(`${name.first} ${name.last}`);
+    }
+
+    let candidates = [];
+    let pick = { candidate: null, confidence: 0, status: 'no_match' };
+
     try {
-      candidates = await this.#searchTeachers(name.last);
+      for (const term of searchTerms) {
+        candidates = await this.#searchTeachers(term);
+        const attempt = pickBestCandidate(query.rawName, candidates);
+        if (attempt.status === 'ok') {
+          pick = attempt;
+          break;
+        }
+        if (attempt.status === 'ambiguous') {
+          pick = attempt;
+          break;
+        }
+        if (attempt.confidence > pick.confidence) pick = attempt;
+      }
     } catch (err) {
       console.warn('[Purdue RMP] RMP fetch failed:', err);
       return { source: 'rmp', confidence: 0, status: 'fetch_failed' };
     }
 
-    const { candidate, confidence, status } = pickBestCandidate(query.rawName, candidates);
+    let { candidate, confidence, status } = pick;
 
     if (status !== 'ok' || !candidate) {
       return { source: 'rmp', confidence, status };
+    }
+
+    let reviews = extractReviews(candidate);
+
+    // Some searches return the right professor but an empty ratings list; retry with
+    // a fuller name string when RMP says there are ratings.
+    if (!reviews.length && candidate.numRatings > 0 && name.first) {
+      const fullText = `${name.first} ${name.last}`.trim();
+      if (fullText !== name.last) {
+        try {
+          const retry = await this.#searchTeachers(fullText);
+          const retryPick = pickBestCandidate(query.rawName, retry);
+          if (retryPick.status === 'ok' && retryPick.candidate?.legacyId === candidate.legacyId) {
+            const retryReviews = extractReviews(retryPick.candidate);
+            if (retryReviews.length) reviews = retryReviews;
+          }
+        } catch {
+          /* keep original */
+        }
+      }
     }
 
     const tags = (candidate.teacherRatingTags || [])
@@ -96,6 +170,7 @@ export class RmpProvider extends RatingProvider {
         wouldTakeAgainPct:
           candidate.wouldTakeAgainPercent >= 0 ? Math.round(candidate.wouldTakeAgainPercent) : undefined,
         tags: tags.length ? tags : undefined,
+        reviews: reviews.length ? reviews : undefined,
         profileUrl: candidate.legacyId
           ? `https://www.ratemyprofessors.com/professor/${candidate.legacyId}`
           : undefined,

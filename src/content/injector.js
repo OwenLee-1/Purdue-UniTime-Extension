@@ -1,32 +1,34 @@
 // The "hands" of the on-page helper: it places a badge into the page.
-//
-// Key idea: we mount our badge inside a SHADOW DOM — a sealed style bubble so
-// UniTime's global GWT styles can't change how our badge looks, and our styles
-// can't leak out and disturb the page.
-//
-// Because a rating arrives asynchronously (the background worker has to query
-// RateMyProfessors), we inject a "loading" badge immediately and then swap in the
-// real result via the returned setResult() handle.
 
 import { createBadge } from './ui/Badge.js';
 import { createPopover } from './ui/Popover.js';
+import { setBlocked, isBlocked } from '../core/blocks.js';
+import { getMark, updateMark } from '../core/userMarks.js';
 
 /**
  * @typedef {Object} BadgeHandle
- * @property {(result: object) => void} setResult  Replace the badge contents with a result.
- * @property {() => void} remove                   Remove the badge entirely.
+ * @property {(result: object) => void} setResult
+ * @property {(mark: import('../core/userMarks.js').UserMark | null) => void} refreshMark
+ * @property {() => void} remove
  */
 
 /**
- * Inject a (loading) badge into an instructor cell.
- * @param {Element} target  The instructor cell we detected.
- * @returns {BadgeHandle | null}  Null if a badge already exists here.
+ * @typedef {Object} InjectContext
+ * @property {string} rawName
+ * @property {(blocked: boolean) => void | Promise<void>} [onBlockToggle]
  */
-export function injectBadge(target) {
+
+/**
+ * @param {Element} target
+ * @param {InjectContext} [ctx]
+ * @returns {BadgeHandle | null}
+ */
+export function injectBadge(target, ctx = {}) {
   if (target.querySelector('.rmp-badge-host')) return null;
 
   const host = document.createElement('span');
   host.className = 'rmp-badge-host';
+  host.dataset.rmpInstructor = ctx.rawName || '';
   host.style.marginLeft = '6px';
   host.style.display = 'inline-block';
   host.style.verticalAlign = 'middle';
@@ -36,17 +38,22 @@ export function injectBadge(target) {
   shadow.appendChild(current);
   target.appendChild(host);
 
-  let latest = { status: 'loading' };
+  let latest = { status: 'loading', displayName: ctx.rawName, userMark: null };
   let popover = null;
   let hideTimer = null;
+
+  function renderBadge() {
+    const next = createBadge(latest);
+    shadow.replaceChild(next, current);
+    current = next;
+  }
 
   function positionPopover() {
     if (!popover) return;
     const rect = host.getBoundingClientRect();
-    // Prefer below the badge; flip above if not enough room.
     const below = window.innerHeight - rect.bottom;
     popover.style.left = `${Math.max(8, rect.left)}px`;
-    if (below < 180) {
+    if (below < 280) {
       popover.style.top = '';
       popover.style.bottom = `${window.innerHeight - rect.top + 6}px`;
     } else {
@@ -55,14 +62,43 @@ export function injectBadge(target) {
     }
   }
 
-  function showPopover() {
-    if (latest.status !== 'ok') return;
+  async function applyMarkPatch(patch) {
+    if (!ctx.rawName) return;
+    const mark = await updateMark(ctx.rawName, patch);
+    latest = { ...latest, userMark: mark };
+    renderBadge();
+    if (popover) {
+      popover.remove();
+      popover = null;
+    }
+  }
+
+  async function showPopover() {
+    if (latest.status === 'loading' || latest.status === 'staff_tba') return;
     if (hideTimer) {
       clearTimeout(hideTimer);
       hideTimer = null;
     }
     if (popover) return;
-    popover = createPopover(latest);
+
+    const [blocked, userMark] = await Promise.all([
+      ctx.rawName ? isBlocked(ctx.rawName) : false,
+      ctx.rawName ? getMark(ctx.rawName) : null,
+    ]);
+    latest.userMark = userMark;
+
+    popover = createPopover(latest, {
+      rawName: ctx.rawName,
+      isBlocked: blocked,
+      userMark,
+      onMarkUpdate: applyMarkPatch,
+      onBlockToggle: async (nextBlocked) => {
+        if (!ctx.rawName) return;
+        await setBlocked(ctx.rawName, nextBlocked);
+        if (ctx.onBlockToggle) await ctx.onBlockToggle(nextBlocked);
+        hidePopover();
+      },
+    });
     popover.addEventListener('mouseenter', () => {
       if (hideTimer) {
         clearTimeout(hideTimer);
@@ -70,7 +106,7 @@ export function injectBadge(target) {
       }
     });
     popover.addEventListener('mouseleave', scheduleHide);
-    shadow.appendChild(popover);
+    document.body.appendChild(popover);
     positionPopover();
   }
 
@@ -82,7 +118,6 @@ export function injectBadge(target) {
   }
 
   function scheduleHide() {
-    // Small delay so the user can move the mouse from badge onto the card (e.g. to click the link).
     hideTimer = setTimeout(hidePopover, 150);
   }
 
@@ -90,16 +125,19 @@ export function injectBadge(target) {
   host.addEventListener('mouseleave', scheduleHide);
 
   return {
-    setResult(result) {
-      // staff/TBA: there's no professor here, so don't show anything.
+    async setResult(result) {
       if (result?.status === 'staff_tba') {
         host.remove();
+        hidePopover();
         return;
       }
-      latest = result;
-      const next = createBadge(result);
-      shadow.replaceChild(next, current);
-      current = next;
+      const userMark = ctx.rawName ? await getMark(ctx.rawName) : null;
+      latest = { ...result, displayName: result.displayName || ctx.rawName, userMark };
+      renderBadge();
+    },
+    refreshMark(mark) {
+      latest = { ...latest, userMark: mark };
+      renderBadge();
     },
     remove() {
       hidePopover();

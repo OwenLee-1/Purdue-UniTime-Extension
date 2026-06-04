@@ -12,6 +12,7 @@
 import { getProvider } from '../core/providers/registry.js';
 import { normalizeName } from '../core/matching.js';
 import { getCached, setCached } from '../core/cache.js';
+import { computeComposite, summarizeReviewSentiment } from '../core/compositeScore.js';
 
 /**
  * Cache key for the RMP rating. It is intentionally course-INDEPENDENT: a
@@ -28,7 +29,7 @@ function rmpCacheKey(query) {
 // Scanning a class list can fire dozens of lookups at once; hitting RMP with all
 // of them in parallel risks rate-limiting (which previously got cached as a
 // permanent "GPA only" result). We cap how many RMP fetches run at a time.
-const MAX_CONCURRENT_RMP = 3;
+const MAX_CONCURRENT_RMP = 5;
 let activeRmp = 0;
 const rmpQueue = [];
 
@@ -63,15 +64,21 @@ async function getRmpResult(query) {
 
   const key = rmpCacheKey(query);
   const cached = await getCached(key);
-  if (cached) return cached;
-
-  const result = await runWhenFree(() => provider.lookup(query));
-
-  // Only cache stable answers. A failed network call is temporary — don't let it
-  // stick around and mask a professor who actually has ratings.
-  if (result && result.status !== 'fetch_failed') {
-    await setCached(key, result);
+  if (cached?.status === 'ok' && typeof cached.overall === 'number') {
+    const missingReviews =
+      cached.sampleSize > 0 && !(cached.detail?.reviews?.length);
+    if (!missingReviews) return cached;
   }
+
+  let result = await runWhenFree(() => provider.lookup(query));
+
+  // One retry on transient failure (common when many rows load at once).
+  if (result?.status === 'fetch_failed') {
+    await new Promise((r) => setTimeout(r, 400));
+    result = await runWhenFree(() => provider.lookup(query));
+  }
+
+  await setCached(key, result);
   return result;
 }
 
@@ -96,6 +103,7 @@ async function handleLookup(query) {
     source: 'rmp',
     confidence: rmpRes?.confidence ?? 0,
     status: rmpRes?.status || 'no_match',
+    course: query.course,
   };
 
   if (rmpRes?.status === 'ok') {
@@ -108,10 +116,24 @@ async function handleLookup(query) {
   if (gradesRes?.status === 'ok') {
     merged.gpa = gradesRes.gpa;
     merged.gpaSampleSize = gradesRes.gpaSampleSize;
-    // If RMP had no usable rating but we DO have grade data, promote the status to
-    // "ok" so the badge still renders a (GPA-only) pill instead of a quiet "?".
-    if (merged.status !== 'ok') merged.status = 'ok';
+    merged.gpaDistribution = gradesRes.gpaDistribution;
+    // Show GPA-only pill when grades exist but RMP didn't match — but never overwrite
+    // a successful RMP hit (overall must stay if we already have it).
+    if (merged.status !== 'ok' && typeof merged.overall !== 'number') {
+      merged.status = 'ok';
+    }
   }
+
+  const reviewSentiment = summarizeReviewSentiment(merged.detail?.reviews);
+  if (reviewSentiment) merged.reviewSentiment = reviewSentiment;
+
+  const composite = computeComposite({
+    overall: merged.overall,
+    wouldTakeAgainPct: merged.detail?.wouldTakeAgainPct,
+    gpa: merged.gpa,
+    recentReviewAvg: reviewSentiment?.avg,
+  });
+  if (composite) merged.composite = composite;
 
   return merged;
 }

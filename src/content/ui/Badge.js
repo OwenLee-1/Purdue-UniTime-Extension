@@ -31,6 +31,29 @@ function gpaColor(gpa) {
   return '#dc2626';
 }
 
+/**
+ * @param {HTMLElement} pill
+ * @param {import('../../core/userMarks.js').UserMark | null | undefined} mark
+ */
+function applyPersonalIndicators(pill, mark) {
+  if (!mark) return;
+  const tags = [];
+  if (mark.sentiment === 'like') tags.push('👍');
+  if (mark.sentiment === 'dislike') tags.push('👎');
+  if (mark.taken) tags.push('✓ had');
+
+  if (!tags.length) return;
+  pill.textContent = `${pill.textContent} · ${tags.join(' ')}`;
+
+  const lines = [];
+  if (mark.sentiment === 'like') lines.push('You liked this professor');
+  if (mark.sentiment === 'dislike') lines.push('You disliked this professor');
+  if (mark.taken) lines.push('You had this professor before');
+  if (mark.note) lines.push(`Your note: ${mark.note}`);
+  const extra = lines.join(' · ');
+  pill.title = pill.title ? `${pill.title}\n${extra}` : extra;
+}
+
 const BASE_STYLE = {
   display: 'inline-flex',
   alignItems: 'center',
@@ -71,12 +94,15 @@ export function createBadge(result) {
     pill.textContent = `★ ${result.overall.toFixed(1)}${gpaPart}`;
 
     const wta = result.detail?.wouldTakeAgainPct;
+    const comp = result.composite?.score;
     pill.title =
       `RateMyProfessors: ${result.overall.toFixed(1)}/5` +
       (hasGpa ? `, avg GPA ${result.gpa.toFixed(2)}` : '') +
+      (comp != null ? `, composite ${comp.toFixed(1)}/5` : '') +
       (result.difficulty !== undefined ? `, difficulty ${result.difficulty.toFixed(1)}/5` : '') +
       (wta !== undefined ? `, ${wta}% would take again` : '') +
       (result.sampleSize ? ` (${result.sampleSize} ratings)` : '');
+    applyPersonalIndicators(pill, result.userMark);
     return pill;
   }
 
@@ -87,6 +113,7 @@ export function createBadge(result) {
     pill.title = `Average GPA ${result.gpa.toFixed(2)} for this course` +
       (result.gpaSampleSize ? ` (${result.gpaSampleSize} sections)` : '') +
       ' — no confident RateMyProfessors match.';
+    applyPersonalIndicators(pill, result.userMark);
     return pill;
   }
 
@@ -104,5 +131,6 @@ export function createBadge(result) {
       : status === 'fetch_failed'
         ? "Couldn't reach RateMyProfessors."
         : 'No confident RateMyProfessors match.';
+  applyPersonalIndicators(pill, result.userMark);
   return pill;
 }

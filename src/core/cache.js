@@ -11,7 +11,8 @@ const HIT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** How long to remember a "no match" before trying again (1 day). */
 const MISS_TTL_MS = 1 * 24 * 60 * 60 * 1000;
 
-const KEY_PREFIX = 'rmp-cache:';
+// Bump version when cached result shape changes.
+const KEY_PREFIX = 'rmp-cache:v3:';
 
 /**
  * Build the storage key for a given lookup.
@@ -47,7 +48,10 @@ export async function getCached(normalizedKey) {
  * @returns {Promise<void>}
  */
 export async function setCached(normalizedKey, result) {
-  const ttl = result.status === 'ok' ? HIT_TTL_MS : MISS_TTL_MS;
-  const entry = { result, expiresAt: Date.now() + ttl };
+  // Only cache real RMP hits. Caching no_match/ambiguous caused "GPA-only" rows for days.
+  if (result.status !== 'ok' || typeof result.overall !== 'number') {
+    return;
+  }
+  const entry = { result, expiresAt: Date.now() + HIT_TTL_MS };
   await chrome.storage.local.set({ [storageKey(normalizedKey)]: entry });
 }

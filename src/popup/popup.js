@@ -1,4 +1,7 @@
 // The little window shown when you click the extension's toolbar icon.
+
+import { listBlocked, setBlocked } from '../core/blocks.js';
+import { listMarks, updateMark } from '../core/userMarks.js';
 //
 // Toggles are saved to chrome.storage.local. The content script reads them on
 // load (Show ratings / Debug) and reacts live to the "hide schedule preview"
@@ -10,6 +13,91 @@ const debugBox = document.getElementById('debug');
 const clearBtn = document.getElementById('clearCache');
 const statusEl = document.getElementById('status');
 const reportLink = document.getElementById('reportLink');
+const blockedListEl = document.getElementById('blockedList');
+const marksListEl = document.getElementById('marksList');
+
+async function renderBlockedList() {
+  const list = await listBlocked();
+  blockedListEl.innerHTML = '';
+  if (!list.length) {
+    blockedListEl.textContent = 'None';
+    return;
+  }
+  for (const item of list) {
+    const row = document.createElement('div');
+    Object.assign(row.style, {
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      gap: '8px',
+      margin: '4px 0',
+      fontSize: '12px',
+    });
+    const name = document.createElement('span');
+    name.textContent = item.rawName;
+    name.style.flex = '1';
+    const btn = document.createElement('button');
+    btn.textContent = 'Unhide';
+    Object.assign(btn.style, { width: 'auto', padding: '4px 8px', fontSize: '11px' });
+    btn.addEventListener('click', async () => {
+      await setBlocked(item.rawName, false);
+      await renderBlockedList();
+      setStatus('Section unhidden on UniTime');
+    });
+    row.append(name, btn);
+    blockedListEl.appendChild(row);
+  }
+}
+
+renderBlockedList();
+
+async function renderMarksList() {
+  const list = await listMarks();
+  marksListEl.innerHTML = '';
+  if (!list.length) {
+    marksListEl.textContent = 'None';
+    return;
+  }
+  for (const item of list) {
+    const row = document.createElement('div');
+    Object.assign(row.style, {
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '4px',
+      margin: '6px 0',
+      fontSize: '12px',
+      padding: '6px 0',
+      borderBottom: '1px solid #e5e7eb',
+    });
+    const top = document.createElement('div');
+    Object.assign(top.style, { display: 'flex', justifyContent: 'space-between', alignItems: 'center' });
+    const name = document.createElement('span');
+    const tags = [];
+    if (item.sentiment === 'like') tags.push('👍');
+    if (item.sentiment === 'dislike') tags.push('👎');
+    if (item.taken) tags.push('had before');
+    name.textContent = `${item.rawName}${tags.length ? ` (${tags.join(', ')})` : ''}`;
+    const clearBtn = document.createElement('button');
+    clearBtn.textContent = 'Clear';
+    Object.assign(clearBtn.style, { width: 'auto', padding: '3px 8px', fontSize: '10px' });
+    clearBtn.addEventListener('click', async () => {
+      await updateMark(item.rawName, { sentiment: null, taken: false, note: '' });
+      await renderMarksList();
+      setStatus('Marks cleared');
+    });
+    top.append(name, clearBtn);
+    row.appendChild(top);
+    if (item.note) {
+      const note = document.createElement('div');
+      note.textContent = item.note;
+      Object.assign(note.style, { color: '#6b7280', fontSize: '10px' });
+      row.appendChild(note);
+    }
+    marksListEl.appendChild(row);
+  }
+}
+
+renderMarksList();
 
 function setStatus(msg) {
   statusEl.textContent = msg;

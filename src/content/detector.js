@@ -78,11 +78,18 @@ function scanOnce(onFound) {
     if (instructorIdx < 0) continue;
 
     const rows = table.querySelectorAll('tr[role="row"]');
+    let lastSubject = '';
+    let lastNumber = '';
     for (const row of rows) {
       if (row.querySelector('.unitime-TableHeader')) continue;
 
       const cells = row.querySelectorAll('td[role="gridcell"]');
       if (cells.length < MIN_CLASS_ROW_CELLS || cells.length <= instructorIdx) continue;
+
+      const subject = (cells[1]?.textContent || '').trim() || lastSubject;
+      const number = (cells[2]?.textContent || '').trim() || lastNumber;
+      if (cells[1]?.textContent?.trim()) lastSubject = subject;
+      if (cells[2]?.textContent?.trim()) lastNumber = number;
 
       const cell = cells[instructorIdx];
       if (cell.hasAttribute(PROCESSED_ATTR)) continue;
@@ -91,12 +98,14 @@ function scanOnce(onFound) {
       const text = (cell.textContent || '').trim();
       if (!looksLikeInstructorName(text)) continue;
 
+      const courseContext = subject && number ? `${subject} ${number}` : readCourseContext(row);
+
       cell.setAttribute(PROCESSED_ATTR, 'true');
       onFound({
         text,
         element: cell,
         rowElement: row,
-        courseContext: readCourseContext(row),
+        courseContext,
       });
     }
   }
@@ -121,6 +130,37 @@ export function startDetector(onFound) {
     observer.disconnect();
     if (timer) clearTimeout(timer);
   };
+}
+
+/**
+ * Show/hide class rows based on the user's blocked-professor list.
+ * @param {Record<string, { rawName: string }>} blocksMap
+ * @param {(rawName: string) => string} keyFor  e.g. professorKey
+ */
+export function applyBlockVisibility(blocksMap, keyFor) {
+  for (const table of findScheduleTables()) {
+    const instructorIdx = getInstructorColumnIndex(table);
+    if (instructorIdx < 0) continue;
+
+    const rows = table.querySelectorAll('tr[role="row"]');
+    for (const row of rows) {
+      if (row.querySelector('.unitime-TableHeader')) continue;
+      const cells = row.querySelectorAll('td[role="gridcell"]');
+      if (cells.length < MIN_CLASS_ROW_CELLS || cells.length <= instructorIdx) continue;
+
+      const text = (cells[instructorIdx]?.textContent || '').trim();
+      if (!text) continue;
+
+      const key = keyFor(text);
+      if (key && blocksMap[key]) {
+        row.style.display = 'none';
+        row.dataset.rmpBlocked = '1';
+      } else if (row.dataset.rmpBlocked === '1') {
+        row.style.display = '';
+        delete row.dataset.rmpBlocked;
+      }
+    }
+  }
 }
 
 export { PROCESSED_ATTR };
