@@ -4,7 +4,7 @@ Rev A: A Chrome extension that give professor data alongside each professor show
 
 
 
-> Status: **alpha**. Core features below are working. See `[BUILD_PLAN.md](./BUILD_PLAN.md)` for the roadmap.
+> Status: **beta 1.0.0** — documented baseline [`BETA_1.0.0.md`](./BETA_1.0.0.md) · tag `v1.0.0-beta`. See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
 
 ## Overview
 
@@ -19,19 +19,27 @@ it works offline.
 - **Calendar export helper**: paste your UniTime iCalendar URL into the popup and get
 one-click "Add to Google / Apple / Outlook" links.
 
-## Installation - Alpha Testing
+## Installation — Beta 1.0.0
 
-1. Download the alpha build zip file inside "alpha" folder and **unzip** it.
-2. Go to `chrome://extensions` in Chrome.
-3. Turn on **Developer mode** (top-right toggle).
-4. Click **Load unpacked** and select the unzipped folder.
-5. Open the extension's popup and click **Clear cached ratings** once.
-6. **Reload** your UniTime class-list tab — ratings appear next to instructor names.
+**From source (recommended for this repo):**
 
-> Note: Chrome can't install a raw `.zip` directly; it must be unzipped first. A true
-> one-click install will come once the extension is published to the Chrome Web Store.
+```bash
+npm install
+npm run build
+```
 
-### Reporting feedback (alpha)
+1. Go to `chrome://extensions` in Chrome.
+2. Turn on **Developer mode** (top-right toggle).
+3. Click **Load unpacked** and select the **`dist/`** folder (created by `npm run build`).
+4. Open the extension popup → **Clear cached ratings** once.
+5. **Reload** your UniTime class-list tab — ratings appear next to instructor names.
+6. Optional: enable **Debug** in the popup and confirm the console shows `[Purdue RMP] build 1.0.0-beta`.
+
+Full verification steps: [`BETA_1.0.0.md`](./BETA_1.0.0.md).
+
+> Do not load the repo root as unpacked — Chrome needs the built `dist/` output. A Chrome Web Store install will come later.
+
+### Reporting feedback (beta)
 
 The easiest way to report a problem or suggest something is to
 **[open an issue](https://github.com/OwenLee-1/Purdue-UniTime-Extension/issues/new/choose)**

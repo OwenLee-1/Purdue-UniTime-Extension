@@ -7,6 +7,11 @@ import { getMark, updateMark } from '../core/userMarks.js';
 
 /**
  * @typedef {Object} BadgeHandle
+ * @property {string} [rawName]
+ * @property {string} [courseContext]
+ * @property {import('./detector.js').InstructorCandidate} [candidate]
+ * @property {Element} [element]
+ * @property {object} [entry]
  * @property {(result: object) => void} setResult
  * @property {(mark: import('../core/userMarks.js').UserMark | null) => void} refreshMark
  * @property {() => void} remove
@@ -134,6 +139,11 @@ export function injectBadge(target, ctx = {}) {
       const userMark = ctx.rawName ? await getMark(ctx.rawName) : null;
       latest = { ...result, displayName: result.displayName || ctx.rawName, userMark };
       renderBadge();
+      if (popover) {
+        const reopen = host.matches(':hover');
+        hidePopover();
+        if (reopen) showPopover();
+      }
     },
     refreshMark(mark) {
       latest = { ...latest, userMark: mark };

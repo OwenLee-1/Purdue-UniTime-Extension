@@ -1,9 +1,6 @@
-// The "start here" file for the on-page helper (content script).
-//
-// Runs on Purdue UniTime. Finds instructor cells in the List of Classes table and
-// attaches a small rating badge next to each name (placeholder until RMP lookup
-// is wired in milestone M3).
+// Content script entry — detects instructors, batches lookups, applies badges.
 
+import { normalizeCourseKey } from '../core/courseKey.js';
 import { startDetector, applyBlockVisibility } from './detector.js';
 import { injectBadge } from './injector.js';
 import { addToComparison, setEntryResult, removeFromComparison } from './comparator.js';
@@ -11,23 +8,85 @@ import { initOverlayControl } from './overlay.js';
 import { isBlocked, getBlocksMap, professorKey, BLOCKS_STORAGE_KEY } from '../core/blocks.js';
 import { getMark, MARKS_STORAGE_KEY } from '../core/userMarks.js';
 import { hideProfessorRow, showProfessorRow } from './rowFilter.js';
+import {
+  queueLookup,
+  BUILD_TAG,
+  maybeClearLookupCacheFromStorage,
+  onProfessorRmpReady,
+  hasWarmMergedCache,
+} from './lookup.js';
 
-/** @type {Map<string, import('./injector.js').BadgeHandle>} */
-const badgeHandles = new Map();
+/** @type {Set<import('./injector.js').BadgeHandle>} */
+const badgeHandles = new Set();
 
-console.log('[Purdue RMP] content script loaded on', location.href);
+console.log(`[Purdue RMP] build ${BUILD_TAG} on`, location.href);
 
-async function getSettings() {
-  return chrome.storage.local.get(['enabled', 'debug']);
+/**
+ * @param {import('./injector.js').BadgeHandle} badge
+ * @param {import('./detector.js').InstructorCandidate} candidate
+ * @param {object} entry
+ * @param {object} result
+ */
+async function applyResultToBadge(badge, candidate, entry, result) {
+  if (!candidate.element.isConnected) return;
+
+  const base =
+    result && typeof result === 'object'
+      ? { ...result, displayName: candidate.text, course: candidate.courseContext }
+      : result;
+  const userMark = await getMark(candidate.text);
+  const enriched = base && typeof base === 'object' ? { ...base, userMark } : base;
+  await badge.setResult(enriched);
+  setEntryResult(entry, enriched);
+}
+
+/**
+ * When RMP succeeds for a professor, refresh every other badge for that name
+ * (fixes duplicate rows that queued before the shared RMP cache was warm).
+ * @param {string} pk
+ * @param {import('./injector.js').BadgeHandle} sourceBadge
+ */
+function refreshSiblingBadges(pk, sourceBadge) {
+  for (const handle of badgeHandles) {
+    if (handle === sourceBadge || !handle.rawName) continue;
+    if (professorKey(handle.rawName) !== pk) continue;
+    if (!handle.element?.isConnected || !handle.candidate || !handle.entry) continue;
+
+    queueLookup(
+      {
+        rawName: handle.rawName,
+        school: 'purdue',
+        course: handle.courseContext || '',
+      },
+      (result) => applyResultToBadge(handle, handle.candidate, handle.entry, result)
+    );
+  }
+}
+
+function refreshBadgesForProfessor(pk) {
+  for (const handle of badgeHandles) {
+    if (!handle.rawName || professorKey(handle.rawName) !== pk) continue;
+    if (!handle.element?.isConnected || !handle.candidate || !handle.entry) continue;
+
+    const query = {
+      rawName: handle.rawName,
+      school: 'purdue',
+      course: handle.courseContext || '',
+    };
+    if (hasWarmMergedCache(query)) continue;
+
+    queueLookup(query, (result) =>
+      applyResultToBadge(handle, handle.candidate, handle.entry, result)
+    );
+  }
 }
 
 async function boot() {
-  // Overlay control is independent of the ratings feature, so set it up first
-  // (and regardless of whether ratings are enabled).
   initOverlayControl();
 
-  const settings = await getSettings();
+  onProfessorRmpReady((pk) => refreshBadgesForProfessor(pk));
 
+  const settings = await chrome.storage.local.get(['enabled', 'debug']);
   if (settings.enabled === false) {
     console.log('[Purdue RMP] disabled via popup toggle');
     return;
@@ -46,18 +105,21 @@ async function boot() {
     if (changes[MARKS_STORAGE_KEY]) {
       refreshAllMarks();
     }
+    maybeClearLookupCacheFromStorage(changes);
   });
 
   async function refreshAllMarks() {
-    for (const [rawName, handle] of badgeHandles) {
-      const mark = await getMark(rawName);
-      handle.refreshMark(mark);
+    for (const handle of badgeHandles) {
+      if (!handle.rawName) continue;
+      handle.refreshMark(await getMark(handle.rawName));
     }
   }
 
   startDetector(async (candidate) => {
+    const courseContext = normalizeCourseKey(candidate.courseContext) || '';
+
     if (debug) {
-      console.log('[Purdue RMP] instructor:', candidate.text, candidate.courseContext || '');
+      console.log('[Purdue RMP] instructor:', candidate.text, courseContext || '(no course)');
     }
 
     if (await isBlocked(candidate.text)) {
@@ -65,8 +127,12 @@ async function boot() {
       return;
     }
 
-    const entry = { rowElement: candidate.rowElement, instructorCell: candidate.element, blocked: false };
-    addToComparison(candidate.courseContext, entry);
+    const entry = {
+      rowElement: candidate.rowElement,
+      instructorCell: candidate.element,
+      blocked: false,
+    };
+    addToComparison(courseContext, entry);
 
     const badge = injectBadge(candidate.element, {
       rawName: candidate.text,
@@ -75,6 +141,7 @@ async function boot() {
         if (blocked) {
           hideProfessorRow(candidate.rowElement);
           badge.remove();
+          badgeHandles.delete(badge);
           removeFromComparison(entry);
         } else {
           showProfessorRow(candidate.rowElement);
@@ -82,31 +149,44 @@ async function boot() {
       },
     });
     if (!badge) return;
-    badgeHandles.set(candidate.text, badge);
 
-    // Ask the background worker (which can reach RateMyProfessors) for a rating.
-    chrome.runtime.sendMessage(
-      {
-        type: 'LOOKUP_PROFESSOR',
-        query: { rawName: candidate.text, school: 'purdue', course: candidate.courseContext },
-      },
-      (response) => {
-        const result = chrome.runtime.lastError || !response?.ok ? { status: 'fetch_failed' } : response.result;
-        if (debug) console.log('[Purdue RMP] result for', candidate.text, result);
-        // Carry the UniTime name + course so the hover card always has context,
-        // even when there's no RMP match (GPA-only).
-        (async () => {
-          const base =
-            result && typeof result === 'object'
-              ? { ...result, displayName: candidate.text, course: candidate.courseContext }
-              : result;
-          const userMark = await getMark(candidate.text);
-          const enriched = base && typeof base === 'object' ? { ...base, userMark } : base;
-          await badge.setResult(enriched);
-          setEntryResult(entry, enriched);
-        })();
+    badge.rawName = candidate.text;
+    badge.courseContext = courseContext;
+    badge.element = candidate.element;
+    badge.candidate = candidate;
+    badge.entry = entry;
+    badgeHandles.add(badge);
+
+    const query = {
+      rawName: candidate.text,
+      school: 'purdue',
+      course: courseContext,
+    };
+
+    queueLookup(query, async (result) => {
+      if (debug) {
+        console.log(
+          '[Purdue RMP] result for',
+          candidate.text,
+          courseContext || '(no course)',
+          'overall',
+          result?.overall,
+          'rmp',
+          result?.rmpFetchedIn,
+          'rmpStatus',
+          result?.rmpStatus,
+          result?.rmpErrorDetail || '',
+          result
+        );
       }
-    );
+
+      await applyResultToBadge(badge, candidate, entry, result);
+
+      const pk = professorKey(candidate.text);
+      if (pk && (typeof result?.overall === 'number' || result?.rmpStatus === 'ok')) {
+        refreshSiblingBadges(pk, badge);
+      }
+    });
   });
 }
 

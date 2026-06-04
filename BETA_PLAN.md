@@ -22,7 +22,7 @@ Every feature falls into one of two buckets, and they have wildly different cost
 
 | Feature | Bucket | Effort | Status |
 |---|---|---|---|
-| Inline RMP rating + course GPA badge | 1 | — | ✅ Shipped (alpha) |
+| Inline RMP rating + course GPA badge | 1 | — | ✅ Shipped (beta 1.0.0) |
 | Best-section highlight | 1 | — | ✅ Shipped (alpha) |
 | Calendar export (UniTime iCal → Google/Apple) | 1 | — | ✅ Shipped (alpha) |
 | Hide UniTime hover schedule preview | 1 | — | ✅ Shipped (alpha) |

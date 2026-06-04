@@ -98,9 +98,21 @@ export class RmpProvider extends RatingProvider {
       return { source: 'rmp', confidence: 0, status: 'no_match' };
     }
 
+    const words = String(query.rawName || '')
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean);
+
+    // Prefer last-name search before "S Last" — reduces false ambiguous matches at Purdue.
     const searchTerms = [name.last];
-    if (name.first && name.first.length >= 2) {
+    if (name.first && name.first.length > 1) {
       searchTerms.unshift(`${name.first} ${name.last}`);
+    }
+    if (name.first && name.first.length === 1) {
+      searchTerms.push(`${name.first} ${name.last}`);
+    }
+    if (words.length >= 3) {
+      searchTerms.unshift(words.join(' '));
     }
 
     let candidates = [];
@@ -109,7 +121,9 @@ export class RmpProvider extends RatingProvider {
     try {
       for (const term of searchTerms) {
         candidates = await this.#searchTeachers(term);
-        const attempt = pickBestCandidate(query.rawName, candidates);
+        const attempt = pickBestCandidate(query.rawName, candidates, {
+          course: query.course,
+        });
         if (attempt.status === 'ok') {
           pick = attempt;
           break;
@@ -121,8 +135,9 @@ export class RmpProvider extends RatingProvider {
         if (attempt.confidence > pick.confidence) pick = attempt;
       }
     } catch (err) {
-      console.warn('[Purdue RMP] RMP fetch failed:', err);
-      return { source: 'rmp', confidence: 0, status: 'fetch_failed' };
+      const errorDetail = err instanceof Error ? err.message : String(err);
+      console.warn('[Purdue RMP] RMP fetch failed:', errorDetail);
+      return { source: 'rmp', confidence: 0, status: 'fetch_failed', errorDetail };
     }
 
     let { candidate, confidence, status } = pick;
@@ -140,7 +155,7 @@ export class RmpProvider extends RatingProvider {
       if (fullText !== name.last) {
         try {
           const retry = await this.#searchTeachers(fullText);
-          const retryPick = pickBestCandidate(query.rawName, retry);
+          const retryPick = pickBestCandidate(query.rawName, retry, { course: query.course });
           if (retryPick.status === 'ok' && retryPick.candidate?.legacyId === candidate.legacyId) {
             const retryReviews = extractReviews(retryPick.candidate);
             if (retryReviews.length) reviews = retryReviews;
@@ -157,12 +172,19 @@ export class RmpProvider extends RatingProvider {
       .slice(0, 3)
       .map((t) => t.tagName);
 
+    const overall = toNum(candidate.avgRating);
+    const difficulty = toNum(candidate.avgDifficulty);
+
+    if (overall === undefined) {
+      return { source: 'rmp', confidence, status: 'no_match' };
+    }
+
     return {
       source: 'rmp',
       confidence,
       status: 'ok',
-      overall: candidate.avgRating,
-      difficulty: candidate.avgDifficulty,
+      overall,
+      difficulty,
       sampleSize: candidate.numRatings,
       detail: {
         name: `${candidate.firstName} ${candidate.lastName}`.trim(),
@@ -184,10 +206,15 @@ export class RmpProvider extends RatingProvider {
    * @returns {Promise<Array<object>>} the matching teacher nodes
    */
   async #searchTeachers(text) {
+    // Omit cookies and keep headers minimal — browser cookie jars caused RMP 400
+    // "Request Header Or Cookie Too Large" from the extension context.
     const res = await fetch(RMP_GRAPHQL_URL, {
       method: 'POST',
+      credentials: 'omit',
+      cache: 'no-store',
       headers: {
         'Content-Type': 'application/json',
+        Accept: 'application/json',
         Authorization: RMP_AUTH_HEADER,
       },
       body: JSON.stringify({
@@ -196,9 +223,16 @@ export class RmpProvider extends RatingProvider {
       }),
     });
 
-    if (!res.ok) throw new Error(`RMP responded ${res.status}`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(`RMP responded ${res.status}${body ? `: ${body.slice(0, 120)}` : ''}`);
+    }
 
     const json = await res.json();
+    if (json?.errors?.length) {
+      const msg = json.errors.map((e) => e?.message).filter(Boolean).join('; ');
+      throw new Error(msg || 'RMP GraphQL error');
+    }
     const edges = json?.data?.newSearch?.teachers?.edges || [];
     return edges.map((e) => e.node).filter(Boolean);
   }

@@ -1,9 +1,23 @@
 {
   "manifest_version": 3,
   "name": "Purdue RMP — Inline Professor Ratings",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Overlays RateMyProfessors ratings inline on Purdue's UniTime scheduling site, so students can compare professors without leaving the page.",
-  "permissions": ["storage"],
+  "permissions": [
+    "storage",
+    "offscreen",
+    "declarativeNetRequest",
+    "declarativeNetRequestWithHostAccess"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "rmp_headers",
+        "enabled": true,
+        "path": "rules/rmp_headers.json"
+      }
+    ]
+  },
   "host_permissions": [
     "https://timetable.mypurdue.purdue.edu/*",
     "https://www.ratemyprofessors.com/*"
@@ -16,6 +30,7 @@
     {
       "matches": ["https://timetable.mypurdue.purdue.edu/*"],
       "js": ["src/content/index.js"],
+      "type": "module",
       "run_at": "document_idle"
     }
   ],

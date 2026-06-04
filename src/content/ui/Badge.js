@@ -1,28 +1,18 @@
 // The little inline pill next to an instructor name.
 //
-// It renders differently depending on the lookup status:
-//   loading      -> a muted "…" while we wait on the background worker
-//   ok           -> ★rating · GPA, color-coded green/yellow/red by rating
-//   (GPA only)   -> a neutral "X.XX GPA" pill when grade data exists but no RMP match
-//   no_match /   -> a faint neutral "?" (we won't guess on the wrong professor)
-//   ambiguous
-//   fetch_failed -> a faint "!" so it's distinguishable in debug, but quiet
-//
-// staff_tba is handled by the injector (it just removes the badge entirely).
+// Pill: composite + course GPA only. RMP stars and full breakdown are in the hover card.
 
 /**
- * Pick a color based on the overall rating.
- * @param {number|undefined} overall
+ * @param {number|undefined} score  0–5 scale (RMP or composite)
  */
-function colorFor(overall) {
-  if (overall === undefined) return '#9ca3af';
-  if (overall >= 4) return '#16a34a';
-  if (overall >= 3) return '#ca8a04';
+function colorFor(score) {
+  if (score === undefined) return '#9ca3af';
+  if (score >= 4) return '#16a34a';
+  if (score >= 3) return '#ca8a04';
   return '#dc2626';
 }
 
 /**
- * Color a standalone GPA pill (higher GPA = greener).
  * @param {number} gpa
  */
 function gpaColor(gpa) {
@@ -58,13 +48,14 @@ const BASE_STYLE = {
   display: 'inline-flex',
   alignItems: 'center',
   gap: '4px',
-  padding: '1px 7px',
+  padding: '1px 8px',
   borderRadius: '9999px',
   fontSize: '12px',
   fontFamily: 'system-ui, sans-serif',
   fontWeight: '600',
   lineHeight: '1.5',
   whiteSpace: 'nowrap',
+  cursor: 'pointer',
 };
 
 /**
@@ -80,44 +71,28 @@ export function createBadge(result) {
   if (status === 'loading') {
     Object.assign(pill.style, { background: '#e5e7eb', color: '#6b7280' });
     pill.textContent = '…';
-    pill.title = 'Looking up RateMyProfessors…';
+    pill.title = 'Looking up ratings…';
     return pill;
   }
 
-  const hasRating = typeof result?.overall === 'number';
   const hasGpa = typeof result?.gpa === 'number';
+  const composite = result?.composite;
+  const hasComposite = typeof composite?.score === 'number';
 
-  if (hasRating) {
-    // Primary case: RMP rating + (course GPA in place of difficulty).
-    const gpaPart = hasGpa ? ` · ${result.gpa.toFixed(2)} GPA` : '';
-    Object.assign(pill.style, { background: colorFor(result.overall), color: '#fff', cursor: 'pointer' });
-    pill.textContent = `★ ${result.overall.toFixed(1)}${gpaPart}`;
+  if (hasComposite || hasGpa) {
+    const parts = [];
+    if (hasComposite) parts.push(`◎ ${composite.score.toFixed(1)}`);
+    if (hasGpa) parts.push(`${result.gpa.toFixed(2)} GPA`);
 
-    const wta = result.detail?.wouldTakeAgainPct;
-    const comp = result.composite?.score;
-    pill.title =
-      `RateMyProfessors: ${result.overall.toFixed(1)}/5` +
-      (hasGpa ? `, avg GPA ${result.gpa.toFixed(2)}` : '') +
-      (comp != null ? `, composite ${comp.toFixed(1)}/5` : '') +
-      (result.difficulty !== undefined ? `, difficulty ${result.difficulty.toFixed(1)}/5` : '') +
-      (wta !== undefined ? `, ${wta}% would take again` : '') +
-      (result.sampleSize ? ` (${result.sampleSize} ratings)` : '');
+    const headlineScore = hasComposite ? composite.score : result.gpa;
+    const bg = hasComposite ? colorFor(headlineScore) : gpaColor(result.gpa);
+    Object.assign(pill.style, { background: bg, color: '#fff' });
+    pill.textContent = parts.join(' · ');
+    pill.title = 'Hover for RMP rating, breakdown, and grade distribution';
     applyPersonalIndicators(pill, result.userMark);
     return pill;
   }
 
-  if (hasGpa) {
-    // We have grade data but no confident RMP rating — still useful on its own.
-    Object.assign(pill.style, { background: gpaColor(result.gpa), color: '#fff', cursor: 'pointer' });
-    pill.textContent = `${result.gpa.toFixed(2)} GPA`;
-    pill.title = `Average GPA ${result.gpa.toFixed(2)} for this course` +
-      (result.gpaSampleSize ? ` (${result.gpaSampleSize} sections)` : '') +
-      ' — no confident RateMyProfessors match.';
-    applyPersonalIndicators(pill, result.userMark);
-    return pill;
-  }
-
-  // no_match / ambiguous / fetch_failed -> quiet neutral marker.
   Object.assign(pill.style, {
     background: 'transparent',
     color: '#9ca3af',

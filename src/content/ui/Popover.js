@@ -308,11 +308,47 @@ export function createPopover(result, hooks = {}) {
   }
   card.appendChild(headline);
 
+  if (hasRating) {
+    const rmpLine = document.createElement('div');
+    const n = result.sampleSize ? ` · ${result.sampleSize} ratings` : '';
+    rmpLine.textContent = `★ ${result.overall.toFixed(1)} / 5 instructor RMP${n}`;
+    Object.assign(rmpLine.style, {
+      fontSize: '13px',
+      fontWeight: '700',
+      color: colorFor(result.overall),
+      margin: '0 0 8px',
+    });
+    card.appendChild(rmpLine);
+  } else if (result.rmpStatus && result.rmpStatus !== 'staff_tba') {
+    const rmpNote = document.createElement('div');
+    const msg =
+      result.rmpStatus === 'ambiguous'
+        ? 'Multiple RateMyProfessors matches — open the profile link below if you know the right one.'
+        : result.rmpStatus === 'fetch_failed'
+          ? `Could not reach RateMyProfessors.${result.rmpErrorDetail ? ` (${result.rmpErrorDetail})` : ''} Reload the extension from dist/, clear cache, and refresh. On campus Wi‑Fi, try another network if this persists.`
+          : 'No confident RateMyProfessors match for this name.';
+    rmpNote.textContent = msg;
+    Object.assign(rmpNote.style, {
+      fontSize: '11px',
+      color: '#fbbf24',
+      margin: '0 0 8px',
+      lineHeight: '1.35',
+    });
+    card.appendChild(rmpNote);
+  }
+
   if (composite?.parts?.length) {
     card.appendChild(sectionLabel('Composite breakdown'));
+    const totalWeight = composite.parts.reduce((s, p) => s + p.weight, 0);
     for (const p of composite.parts) {
-      const pct = Math.round(p.normalized * 100);
-      card.appendChild(row(p.label, `${p.raw} (${pct}% of blend)`));
+      // RMP is shown above as its own instructor line — skip duplicate row here.
+      if (p.label === 'RMP rating' && hasRating) continue;
+
+      const weightPct = totalWeight > 0 ? Math.round((p.weight / totalWeight) * 100) : 0;
+      const signalPct = Math.round(p.normalized * 100);
+      card.appendChild(
+        row(p.label, `${p.raw} · ${weightPct}% weight · ${signalPct}% signal`)
+      );
     }
   }
 
@@ -335,7 +371,11 @@ export function createPopover(result, hooks = {}) {
     const n = result.gpaSampleSize ? ` (${result.gpaSampleSize} sections)` : '';
     card.appendChild(row('Avg GPA (this course)', `${result.gpa.toFixed(2)}${n}`));
   }
-  if (result.difficulty !== undefined) card.appendChild(row('Difficulty', `${result.difficulty.toFixed(1)} / 5`));
+  if (hasRating && result.difficulty !== undefined) {
+    card.appendChild(row('RMP difficulty', `${result.difficulty.toFixed(1)} / 5`));
+  } else if (result.difficulty !== undefined) {
+    card.appendChild(row('Difficulty', `${result.difficulty.toFixed(1)} / 5`));
+  }
   if (detail.wouldTakeAgainPct !== undefined) card.appendChild(row('Would take again', `${detail.wouldTakeAgainPct}%`));
   if (result.sampleSize !== undefined) card.appendChild(row('Ratings', String(result.sampleSize)));
 

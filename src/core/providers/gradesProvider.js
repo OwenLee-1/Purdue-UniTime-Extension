@@ -37,17 +37,40 @@ function isSingleEditAway(a, b) {
     if (edits > 1) return false;
 
     if (la > lb) {
-      i++; // deletion from a
+      i++;
     } else if (lb > la) {
-      j++; // insertion into a
+      j++;
     } else {
       i++;
-      j++; // substitution
+      j++;
     }
   }
 
   if (i < la || j < lb) edits++;
   return edits === 1;
+}
+
+/**
+ * Pick one near last-name when UniTime and BoilerGrades disagree slightly
+ * (e.g. "Weng" vs dataset "Wen", also "Wong" one edit away).
+ * @param {string} last
+ * @param {Record<string, { gpa: number, n: number }>} byCourse
+ * @returns {string | null}
+ */
+function pickNearLastName(last, byCourse) {
+  const near = Object.keys(byCourse).filter((k) => isSingleEditAway(last, k));
+  if (near.length === 0) return null;
+  if (near.length === 1) return near[0];
+
+  const prefixHits = near.filter((k) => last.startsWith(k) || k.startsWith(last));
+  if (prefixHits.length === 1) return prefixHits[0];
+
+  near.sort((a, b) => (byCourse[b].n || 0) - (byCourse[a].n || 0));
+  const top = near[0];
+  const runner = near[1];
+  if ((byCourse[top].n || 0) >= (byCourse[runner]?.n || 0) * 2) return top;
+
+  return null;
 }
 
 export class GradesProvider extends RatingProvider {
@@ -73,12 +96,9 @@ export class GradesProvider extends RatingProvider {
     let confidence = 0.9;
 
     if (!rec) {
-      // Fallback: allow a single-edit near-match only if exactly one candidate
-      // exists in this course. This recovers minor source-name mismatches while
-      // staying conservative.
-      const near = Object.keys(byCourse).filter((k) => isSingleEditAway(last, k));
-      if (near.length === 1) {
-        rec = byCourse[near[0]];
+      const nearKey = pickNearLastName(last, byCourse);
+      if (nearKey) {
+        rec = byCourse[nearKey];
         confidence = 0.8;
       }
     }

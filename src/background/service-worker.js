@@ -1,39 +1,24 @@
-// The "back office" of the extension (the background service worker).
-//
-// The content script that runs on the UniTime page is NOT allowed to call other
-// websites directly (Chrome's security model). So when it needs a professor's
-// rating, it sends a message here, and THIS file does the network/cache work and
-// sends the answer back.
-//
-// The conversation looks like:
-//   content script  --->  { type: "LOOKUP_PROFESSOR", query }  --->  here
-//   here            --->  ProviderResult                       --->  content script
+// Background worker — network RMP + bundled GPA (grades data is large).
 
-import { getProvider } from '../core/providers/registry.js';
-import { normalizeName } from '../core/matching.js';
+import { professorKey } from '../core/blocks.js';
 import { getCached, setCached } from '../core/cache.js';
-import { computeComposite, summarizeReviewSentiment } from '../core/compositeScore.js';
+import { lookupKey } from '../core/lookupKey.js';
+import { GradesProvider } from '../core/providers/gradesProvider.js';
+import { RmpProvider } from '../core/providers/rmpProvider.js';
+import { ensureRmpRequestHeaders } from './rmpNetRules.js';
+import { lookupRmpViaOffscreen } from './offscreenFetch.js';
 
-/**
- * Cache key for the RMP rating. It is intentionally course-INDEPENDENT: a
- * professor's RMP rating is the same in every course, so we can reuse it. (GPA is
- * course-specific but comes from local bundled data, so it isn't cached here.)
- * @param {import('../core/providers/Provider.js').ProfessorQuery} query
- */
-function rmpCacheKey(query) {
-  const n = normalizeName(query.rawName);
-  return `${query.school}:${n.last}:${n.first}`;
-}
+export const BUILD_TAG = '1.0.0-beta';
 
-// --- Lightweight concurrency limiter for RMP requests ---
-// Scanning a class list can fire dozens of lookups at once; hitting RMP with all
-// of them in parallel risks rate-limiting (which previously got cached as a
-// permanent "GPA only" result). We cap how many RMP fetches run at a time.
-const MAX_CONCURRENT_RMP = 5;
+const gradesProvider = new GradesProvider();
+const rmpProvider = new RmpProvider();
+
+const MAX_CONCURRENT_RMP = 4;
 let activeRmp = 0;
+/** @type {Array<() => void>} */
 const rmpQueue = [];
 
-function runWhenFree(task) {
+function runWhenRmpSlot(task) {
   return new Promise((resolve, reject) => {
     const attempt = () => {
       if (activeRmp >= MAX_CONCURRENT_RMP) {
@@ -53,102 +38,151 @@ function runWhenFree(task) {
   });
 }
 
-/**
- * Get the RMP rating for a professor, using the cache when possible. Transient
- * fetch failures are NOT cached, so they retry on the next page load.
- * @param {import('../core/providers/Provider.js').ProfessorQuery} query
- */
-async function getRmpResult(query) {
-  const provider = getProvider('rmp');
-  if (!provider) return null;
+chrome.runtime.onInstalled.addListener(() => {
+  ensureRmpRequestHeaders().catch((err) =>
+    console.warn('[Purdue RMP] RMP header rules failed:', err)
+  );
+});
+ensureRmpRequestHeaders().catch((err) =>
+  console.warn('[Purdue RMP] RMP header rules failed:', err)
+);
 
-  const key = rmpCacheKey(query);
-  const cached = await getCached(key);
-  if (cached?.status === 'ok' && typeof cached.overall === 'number') {
+/**
+ * @param {object} query
+ */
+async function lookupRmp(query) {
+  const pk = professorKey(query.rawName);
+  if (!pk) return { source: 'rmp', status: 'no_match', confidence: 0 };
+
+  const stored = await getCached(pk);
+  if (stored?.status === 'ok' && typeof stored.overall === 'number') {
     const missingReviews =
-      cached.sampleSize > 0 && !(cached.detail?.reviews?.length);
-    if (!missingReviews) return cached;
-  }
-
-  let result = await runWhenFree(() => provider.lookup(query));
-
-  // One retry on transient failure (common when many rows load at once).
-  if (result?.status === 'fetch_failed') {
-    await new Promise((r) => setTimeout(r, 400));
-    result = await runWhenFree(() => provider.lookup(query));
-  }
-
-  await setCached(key, result);
-  return result;
-}
-
-/**
- * Handle a single lookup: get the RMP rating (cached) and the course GPA (local),
- * then merge them into one result the badge can render.
- * @param {import('../core/providers/Provider.js').ProfessorQuery & {course?: string}} query
- * @returns {Promise<import('../core/providers/Provider.js').ProviderResult>}
- */
-async function handleLookup(query) {
-  const gradesProvider = getProvider('grades');
-
-  const [rmpRes, gradesRes] = await Promise.all([
-    getRmpResult(query),
-    gradesProvider ? gradesProvider.lookup(query) : Promise.resolve(null),
-  ]);
-
-  // Start from the RMP result so its status (ok / no_match / ambiguous /
-  // fetch_failed) is preserved — that drives the badge's "no confident match"
-  // marker. Then layer GPA on top whenever we have it.
-  const merged = {
-    source: 'rmp',
-    confidence: rmpRes?.confidence ?? 0,
-    status: rmpRes?.status || 'no_match',
-    course: query.course,
-  };
-
-  if (rmpRes?.status === 'ok') {
-    merged.overall = rmpRes.overall;
-    merged.difficulty = rmpRes.difficulty;
-    merged.sampleSize = rmpRes.sampleSize;
-    merged.detail = rmpRes.detail;
-  }
-
-  if (gradesRes?.status === 'ok') {
-    merged.gpa = gradesRes.gpa;
-    merged.gpaSampleSize = gradesRes.gpaSampleSize;
-    merged.gpaDistribution = gradesRes.gpaDistribution;
-    // Show GPA-only pill when grades exist but RMP didn't match — but never overwrite
-    // a successful RMP hit (overall must stay if we already have it).
-    if (merged.status !== 'ok' && typeof merged.overall !== 'number') {
-      merged.status = 'ok';
+      (stored.sampleSize || 0) > 0 && !(stored.detail?.reviews?.length);
+    if (!missingReviews) {
+      return { ...stored, rmpFetchedIn: 'background-cache' };
     }
   }
 
-  const reviewSentiment = summarizeReviewSentiment(merged.detail?.reviews);
-  if (reviewSentiment) merged.reviewSentiment = reviewSentiment;
+  let result;
+  try {
+    result = await runWhenRmpSlot(() => rmpProvider.lookup(query));
+    if (result?.status === 'fetch_failed') {
+      await new Promise((r) => setTimeout(r, 600));
+      result = await runWhenRmpSlot(() => rmpProvider.lookup(query));
+    }
+    if (result?.status === 'fetch_failed') {
+      const offscreen = await lookupRmpViaOffscreen(query);
+      if (offscreen) result = offscreen;
+    }
+  } catch (err) {
+    console.warn('[Purdue RMP] background RMP error:', err);
+    return {
+      source: 'rmp',
+      status: 'fetch_failed',
+      confidence: 0,
+      rmpFetchedIn: 'background',
+      errorDetail: String(err),
+    };
+  }
 
-  const composite = computeComposite({
-    overall: merged.overall,
-    wouldTakeAgainPct: merged.detail?.wouldTakeAgainPct,
-    gpa: merged.gpa,
-    recentReviewAvg: reviewSentiment?.avg,
-  });
-  if (composite) merged.composite = composite;
+  if (result?.status === 'ok' && typeof result.overall === 'number') {
+    await setCached(pk, result);
+  }
 
-  return merged;
+  return { ...result, rmpFetchedIn: 'background' };
 }
 
-// Listen for messages from the content script.
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.type === 'LOOKUP_PROFESSOR') {
-    handleLookup(message.query)
-      .then((result) => sendResponse({ ok: true, result }))
-      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+/**
+ * @param {Array<{ rawName: string, school?: string, course?: string }>} queries
+ */
+async function handleGradesBatch(queries) {
+  const results = {};
+  const seen = new Set();
 
-    // Return true to tell Chrome we'll respond asynchronously (after the await).
+  for (const query of queries) {
+    const key = lookupKey(query);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    try {
+      results[key] = await gradesProvider.lookup(query);
+    } catch (err) {
+      console.warn('[Purdue RMP] grades lookup error:', key, err);
+      results[key] = { source: 'grades', status: 'no_match', confidence: 0 };
+    }
+  }
+  return results;
+}
+
+/**
+ * @param {Array<{ rawName: string, school?: string, course?: string }>} queries
+ */
+async function handleRmpBatch(queries) {
+  const results = {};
+  const seen = new Set();
+  /** @type {Array<{ pk: string, query: object }>} */
+  const pending = [];
+
+  for (const query of queries) {
+    const pk = professorKey(query.rawName);
+    if (!pk || seen.has(pk)) continue;
+    seen.add(pk);
+    pending.push({ pk, query });
+  }
+
+  await Promise.all(
+    pending.map(async ({ pk, query }) => {
+      results[pk] = await lookupRmp(query);
+    })
+  );
+  return results;
+}
+
+chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+  // Handled by the offscreen document.
+  if (message?.type === 'RMP_OFFSCREEN_LOOKUP') return undefined;
+
+  if (message?.type === 'PING') {
+    sendResponse({ ok: true, build: BUILD_TAG });
     return true;
   }
+
+  if (message?.type === 'LOOKUP_GRADES_BATCH') {
+    handleGradesBatch(message.queries || [])
+      .then((results) => sendResponse({ ok: true, results }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message?.type === 'LOOKUP_GRADES') {
+    gradesProvider
+      .lookup(message.query)
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message?.type === 'LOOKUP_RMP') {
+    lookupRmp(message.query || {})
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message?.type === 'LOOKUP_RMP_BATCH') {
+    handleRmpBatch(message.queries || [])
+      .then((results) => sendResponse({ ok: true, results }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message?.type === 'RMP_PROBE') {
+    runWhenRmpSlot(() => rmpProvider.lookup({ rawName: message.rawName || 'Weng' }))
+      .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
   return undefined;
 });
 
-console.log('[Purdue RMP] background service worker ready');
+console.log(`[Purdue RMP] background ${BUILD_TAG} (RMP + GPA)`);

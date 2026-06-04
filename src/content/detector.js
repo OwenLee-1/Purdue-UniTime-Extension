@@ -2,23 +2,76 @@
 //
 // UniTime's "List of Classes" table has a header row with an "Instructor" column
 // (confirmed via discovery on timetable.mypurdue.purdue.edu). Data rows use
-// td[role="gridcell"]. We find that column by header index, not by guessing CSS.
+// td[role="gridcell"]. We find columns by header index, not by guessing CSS.
+//
+// Discovery note: many sections (especially math) use a full-width row (18 cells)
+// plus spillover continuation rows (often 2 cells: blank + instructor name only).
+// We must carry course context forward and still badge spillover rows.
+
+import { normalizeCourseKey } from '../core/courseKey.js';
 
 const PROCESSED_ATTR = 'data-rmp-seen';
 
 /** Headers that identify a schedule table (List of Classes or Alternatives dialog). */
 const SCHEDULE_MARKERS = ['Instructor', 'CRN-SectionId'];
 
-/** Minimum gridcells in a row before we treat it as a real class line (skips 2-cell spillover rows). */
+/** Full class rows have ~18 gridcells; spillover rows are shorter. */
 const MIN_CLASS_ROW_CELLS = 8;
+
+/** UniTime section types and other tokens that are not instructor names. */
+const NON_INSTRUCTOR_TOKENS = new Set([
+  'lec',
+  'lab',
+  'rec',
+  'dist',
+  'ind',
+  'arr',
+  'hyb',
+  'online',
+  'staff',
+  'tba',
+  'tbd',
+  'arranged',
+  'distance',
+  'hybrid',
+]);
 
 /**
  * @typedef {Object} InstructorCandidate
  * @property {string} text
- * @property {Element} element                The instructor cell.
- * @property {Element} rowElement             The full class row (for highlighting).
- * @property {string} [courseContext]  e.g. "MA 26100" when we can read it from the row
+ * @property {Element} element
+ * @property {Element} rowElement
+ * @property {string} [courseContext]
  */
+
+/**
+ * @param {HTMLTableElement} table
+ * @returns {string[]}
+ */
+function getHeaderLabels(table) {
+  return Array.from(table.querySelectorAll('.unitime-TableHeader')).map((h) =>
+    (h.textContent || '').trim()
+  );
+}
+
+/**
+ * @param {HTMLTableElement} table
+ * @param {string} label
+ * @returns {number}
+ */
+function getColumnIndex(table, label) {
+  return getHeaderLabels(table).indexOf(label);
+}
+
+/**
+ * @returns {HTMLTableElement[]}
+ */
+function findScheduleTables() {
+  return Array.from(document.querySelectorAll('table')).filter((table) => {
+    const headers = getHeaderLabels(table);
+    return SCHEDULE_MARKERS.every((marker) => headers.includes(marker));
+  });
+}
 
 /**
  * @param {string} text
@@ -27,46 +80,94 @@ function looksLikeInstructorName(text) {
   const t = text.trim();
   if (t.length < 3 || t.length > 80) return false;
   if (!/[a-zA-Z]/.test(t)) return false;
-  // UniTime uses formats like "S Weng", "D L Johnstone", "Smith, John".
-  return /^[a-zA-Z][a-zA-Z.'\-\s,]+$/.test(t);
+  if (!/^[a-zA-Z][a-zA-Z.'\-\s,]+$/.test(t)) return false;
+
+  const lower = t.toLowerCase();
+  if (NON_INSTRUCTOR_TOKENS.has(lower)) return false;
+
+  // Real instructors are "S Weng", "D L Johnstone", or "Last, First" — not lone section types.
+  if (!t.includes(' ') && !t.includes(',')) return false;
+
+  return true;
 }
 
 /**
- * Tables that contain both Instructor and CRN-SectionId headers.
- * @returns {HTMLTableElement[]}
+ * @param {string} text
+ * @returns {string}
  */
-function findScheduleTables() {
-  return Array.from(document.querySelectorAll('table')).filter((table) => {
-    const headers = Array.from(table.querySelectorAll('.unitime-TableHeader')).map((h) =>
-      (h.textContent || '').trim()
-    );
-    return SCHEDULE_MARKERS.every((marker) => headers.includes(marker));
-  });
+function primaryInstructorText(text) {
+  const parts = String(text || '')
+    .split(/[;\n]/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  for (const part of parts) {
+    if (looksLikeInstructorName(part)) return part;
+  }
+  return (parts[0] || text).trim();
 }
 
 /**
- * Index of the Instructor column in header order.
- * @param {HTMLTableElement} table
- * @returns {number}
+ * @param {string} raw
+ * @returns {string}
  */
-function getInstructorColumnIndex(table) {
-  const headers = Array.from(table.querySelectorAll('.unitime-TableHeader')).map((h) =>
-    (h.textContent || '').trim()
-  );
-  return headers.indexOf('Instructor');
+function normalizeCourseNumber(raw) {
+  const t = String(raw || '').trim();
+  const m = t.match(/^(\d{3,5})/);
+  return m ? m[1] : t;
 }
 
 /**
- * Try to read "MA 26100" style context from the first Subject + Course cells.
  * @param {Element} row
+ * @param {number} subjectIdx
+ * @param {number} courseIdx
+ * @param {string} lastSubject
+ * @param {string} lastNumber
  */
-function readCourseContext(row) {
+function readCourseFromRow(row, subjectIdx, courseIdx, lastSubject, lastNumber) {
   const cells = Array.from(row.querySelectorAll('td[role="gridcell"]'));
-  if (cells.length < 3) return '';
-  const subject = (cells[1]?.textContent || '').trim();
-  const course = (cells[2]?.textContent || '').trim();
-  if (subject && course) return `${subject} ${course}`;
-  return '';
+  const maxIdx = Math.max(subjectIdx, courseIdx);
+  if (cells.length <= maxIdx) {
+    return {
+      courseContext: lastSubject && lastNumber ? `${lastSubject} ${lastNumber}` : '',
+      lastSubject,
+      lastNumber,
+    };
+  }
+
+  const subjectRaw = (cells[subjectIdx]?.textContent || '').trim();
+  const numberRaw = (cells[courseIdx]?.textContent || '').trim();
+  const subject = subjectRaw || lastSubject;
+  const number = normalizeCourseNumber(numberRaw || lastNumber);
+
+  const nextLastSubject = subjectRaw || lastSubject;
+  const nextLastNumber = numberRaw ? normalizeCourseNumber(numberRaw) : lastNumber;
+  const courseContext = subject && number ? `${subject} ${number}` : '';
+
+  return { courseContext, lastSubject: nextLastSubject, lastNumber: nextLastNumber };
+}
+
+/**
+ * @param {NodeListOf<Element>} cells
+ * @param {number} instructorIdx
+ * @param {{ spillover?: boolean }} [opts]
+ * @returns {{ cell: Element, text: string } | null}
+ */
+function findInstructorOnRow(cells, instructorIdx, opts = {}) {
+  if (cells.length > instructorIdx) {
+    const text = primaryInstructorText((cells[instructorIdx].textContent || '').trim());
+    if (looksLikeInstructorName(text)) {
+      return { cell: cells[instructorIdx], text };
+    }
+  }
+
+  // Full rows: never scan other columns (avoids badging "Lec" in the Type column).
+  if (!opts.spillover) return null;
+
+  for (const cell of cells) {
+    const text = primaryInstructorText((cell.textContent || '').trim());
+    if (looksLikeInstructorName(text)) return { cell, text };
+  }
+  return null;
 }
 
 /**
@@ -74,38 +175,54 @@ function readCourseContext(row) {
  */
 function scanOnce(onFound) {
   for (const table of findScheduleTables()) {
-    const instructorIdx = getInstructorColumnIndex(table);
+    const instructorIdx = getColumnIndex(table, 'Instructor');
     if (instructorIdx < 0) continue;
+
+    const subjectIdx = getColumnIndex(table, 'Subject');
+    const courseIdx = getColumnIndex(table, 'Course');
+    const useSubjectIdx = subjectIdx >= 0 ? subjectIdx : 1;
+    const useCourseIdx = courseIdx >= 0 ? courseIdx : 2;
 
     const rows = table.querySelectorAll('tr[role="row"]');
     let lastSubject = '';
     let lastNumber = '';
+
     for (const row of rows) {
       if (row.querySelector('.unitime-TableHeader')) continue;
 
       const cells = row.querySelectorAll('td[role="gridcell"]');
-      if (cells.length < MIN_CLASS_ROW_CELLS || cells.length <= instructorIdx) continue;
+      if (!cells.length) continue;
 
-      const subject = (cells[1]?.textContent || '').trim() || lastSubject;
-      const number = (cells[2]?.textContent || '').trim() || lastNumber;
-      if (cells[1]?.textContent?.trim()) lastSubject = subject;
-      if (cells[2]?.textContent?.trim()) lastNumber = number;
+      const { courseContext, lastSubject: ls, lastNumber: ln } = readCourseFromRow(
+        row,
+        useSubjectIdx,
+        useCourseIdx,
+        lastSubject,
+        lastNumber
+      );
+      lastSubject = ls;
+      lastNumber = ln;
 
-      const cell = cells[instructorIdx];
-      if (cell.hasAttribute(PROCESSED_ATTR)) continue;
-      if (cell.querySelector('.rmp-badge-host')) continue;
+      const isFullRow = cells.length >= MIN_CLASS_ROW_CELLS && cells.length > instructorIdx;
+      const isSpillover = !isFullRow && courseContext;
 
-      const text = (cell.textContent || '').trim();
-      if (!looksLikeInstructorName(text)) continue;
+      if (!isFullRow && !isSpillover) continue;
 
-      const courseContext = subject && number ? `${subject} ${number}` : readCourseContext(row);
+      const hit = findInstructorOnRow(cells, instructorIdx, { spillover: isSpillover });
+      if (!hit) continue;
+
+      const { cell, text } = hit;
+
+      const existingHost = cell.querySelector('.rmp-badge-host');
+      if (cell.hasAttribute(PROCESSED_ATTR) && existingHost) continue;
+      if (existingHost) continue;
 
       cell.setAttribute(PROCESSED_ATTR, 'true');
       onFound({
         text,
         element: cell,
         rowElement: row,
-        courseContext,
+        courseContext: normalizeCourseKey(courseContext) || courseContext,
       });
     }
   }
@@ -133,25 +250,26 @@ export function startDetector(onFound) {
 }
 
 /**
- * Show/hide class rows based on the user's blocked-professor list.
  * @param {Record<string, { rawName: string }>} blocksMap
- * @param {(rawName: string) => string} keyFor  e.g. professorKey
+ * @param {(rawName: string) => string} keyFor
  */
 export function applyBlockVisibility(blocksMap, keyFor) {
   for (const table of findScheduleTables()) {
-    const instructorIdx = getInstructorColumnIndex(table);
+    const instructorIdx = getColumnIndex(table, 'Instructor');
     if (instructorIdx < 0) continue;
 
     const rows = table.querySelectorAll('tr[role="row"]');
     for (const row of rows) {
       if (row.querySelector('.unitime-TableHeader')) continue;
       const cells = row.querySelectorAll('td[role="gridcell"]');
-      if (cells.length < MIN_CLASS_ROW_CELLS || cells.length <= instructorIdx) continue;
+      if (!cells.length) continue;
 
-      const text = (cells[instructorIdx]?.textContent || '').trim();
-      if (!text) continue;
+      const isFullRow =
+        cells.length >= MIN_CLASS_ROW_CELLS && cells.length > instructorIdx;
+      const hit = findInstructorOnRow(cells, instructorIdx, { spillover: !isFullRow });
+      if (!hit) continue;
 
-      const key = keyFor(text);
+      const key = keyFor(hit.text);
       if (key && blocksMap[key]) {
         row.style.display = 'none';
         row.dataset.rmpBlocked = '1';

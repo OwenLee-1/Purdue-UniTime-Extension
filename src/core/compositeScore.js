@@ -19,7 +19,7 @@ export const COMPOSITE_WEIGHTS = {
 };
 
 /** Minimum review snippets with a quality score before recentReviewAvg is used. */
-export const MIN_REVIEWS_FOR_SENTIMENT = 2;
+export const MIN_REVIEWS_FOR_SENTIMENT = 1;
 
 /**
  * Summarize recent RMP review star ratings (structured sentiment — not NLP on text).
