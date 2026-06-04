@@ -1,8 +1,8 @@
 ## BoilerClassPlan — Inline Course Prep
 
-Rev A: A Chrome extension that give professor data alongside each professor shown in the UniTime portal for ease of life. Displays RateMyProfessor ratings and Average Course GPA, pulling from RateMyProfessor and BoilerCourses respectively. 
+Alpha Version: A Chrome extension that give professor data alongside each professor shown in the UniTime portal for ease of life. Displays RateMyProfessor ratings and Average Course GPA, pulling from RateMyProfessor and BoilerCourses respectively. 
 
-
+Beta Version: Added more details under dropdown, created calculation for composite rating taking into account more details. Added RMP rating in hover box instead of main box. Beta version marks the temporary termination of the UniTime work, as I will shift to creating a larger database/website for full tracking, creating individualized plans for people based on majors, classes, teachers, etc. 
 
 > Status: **beta 1.0.0** — documented baseline [`BETA_1.0.0.md`](./BETA_1.0.0.md) · tag `v1.0.0-beta`. See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
 
