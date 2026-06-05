@@ -18,16 +18,25 @@ Use this release as the rollback reference if later work breaks lookups or the h
 - Hide professor, personal marks (like/dislike, taken, note), best-section highlight
 - Popup: enable/disable, debug mode, clear cache, calendar export links
 
-## Install (testers & developers)
+## Install for testers (no terminal)
+
+1. Open **[GitHub Releases](https://github.com/OwenLee-1/Purdue-UniTime-Extension/releases)**.
+2. Pick the latest release (e.g. **v1.0.0-beta**) and download **`purdue-rmp-extension-v1.0.0-beta.zip`**.
+3. **Unzip** the file (Chrome cannot load a `.zip` directly).
+4. Go to `chrome://extensions` → **Developer mode** → **Load unpacked** → select the **unzipped folder**.
+5. Extension popup → **Clear cached ratings** → reload the UniTime tab.
+6. Confirm the console shows: `[Purdue RMP] build 1.0.0-beta`.
+
+> After the first release zip is published, new tags automatically get a fresh zip from GitHub Actions (see `.github/workflows/build-release.yml`). Until then, maintainers can run the workflow manually from the **Actions** tab.
+
+## Install for developers (local build)
 
 ```bash
 npm install
 npm run build
 ```
 
-1. Open `chrome://extensions` → **Developer mode** → **Load unpacked** → select the **`dist/`** folder (not the repo root).
-2. Extension popup → **Clear cached ratings** → reload the UniTime tab.
-3. Confirm the browser console shows: `[Purdue RMP] build 1.0.0-beta`.
+Load the **`dist/`** folder at `chrome://extensions` (not the repo root).
 
 ## Verify RMP is connected
 

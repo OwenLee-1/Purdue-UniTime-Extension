@@ -12,7 +12,7 @@ const HIT_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MISS_TTL_MS = 1 * 24 * 60 * 60 * 1000;
 
 // Bump version when cached result shape changes.
-const KEY_PREFIX = 'rmp-cache:v5:';
+const KEY_PREFIX = 'rmp-cache:v6:';
 
 /**
  * Build the storage key for a given lookup.

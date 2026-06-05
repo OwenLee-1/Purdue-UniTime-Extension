@@ -38,7 +38,7 @@ const TEACHER_SEARCH_QUERY = `query TeacherSearch($text: String!, $schoolID: ID!
             tagName
             tagCount
           }
-          ratings(first: 4) {
+          ratings(first: 12) {
             edges {
               node {
                 comment
@@ -55,22 +55,39 @@ const TEACHER_SEARCH_QUERY = `query TeacherSearch($text: String!, $schoolID: ID!
   }
 }`;
 
+const MAX_COMMENT_SNIPPETS = 5;
+
 /**
- * Pull review snippets from an RMP teacher node.
- * @param {object} candidate
- * @returns {import('./Provider.js').ReviewSnippet[]}
+ * @param {object} node
+ * @returns {import('./Provider.js').ReviewSnippet}
  */
-function extractReviews(candidate) {
-  return (candidate.ratings?.edges || [])
-    .map((e) => e.node)
-    .filter((n) => n && String(n.comment || '').trim())
-    .slice(0, 3)
-    .map((n) => ({
-      comment: String(n.comment).trim(),
-      class: n.class || undefined,
-      quality: toNum(n.qualityRating),
-      difficulty: toNum(n.difficultyRatingRounded),
-    }));
+function mapRatingNode(node) {
+  return {
+    comment: String(node.comment || '').trim(),
+    class: node.class || undefined,
+    quality: toNum(node.qualityRating),
+    difficulty: toNum(node.difficultyRatingRounded),
+  };
+}
+
+/**
+ * Comment snippets for the hover card plus star ratings for sentiment (larger n).
+ * @param {object} candidate
+ * @returns {{ reviews: import('./Provider.js').ReviewSnippet[], recentRatings: import('./Provider.js').ReviewSnippet[] }}
+ */
+function extractReviewData(candidate) {
+  const nodes = (candidate.ratings?.edges || []).map((e) => e.node).filter(Boolean);
+
+  const recentRatings = nodes
+    .map(mapRatingNode)
+    .filter((r) => typeof r.quality === 'number' && r.quality >= 1 && r.quality <= 5);
+
+  const reviews = nodes
+    .filter((n) => String(n.comment || '').trim())
+    .slice(0, MAX_COMMENT_SNIPPETS)
+    .map(mapRatingNode);
+
+  return { reviews, recentRatings };
 }
 
 /** @param {*} v */
@@ -146,19 +163,22 @@ export class RmpProvider extends RatingProvider {
       return { source: 'rmp', confidence, status };
     }
 
-    let reviews = extractReviews(candidate);
+    let { reviews, recentRatings } = extractReviewData(candidate);
 
     // Some searches return the right professor but an empty ratings list; retry with
     // a fuller name string when RMP says there are ratings.
-    if (!reviews.length && candidate.numRatings > 0 && name.first) {
+    if (!reviews.length && !recentRatings.length && candidate.numRatings > 0 && name.first) {
       const fullText = `${name.first} ${name.last}`.trim();
       if (fullText !== name.last) {
         try {
           const retry = await this.#searchTeachers(fullText);
           const retryPick = pickBestCandidate(query.rawName, retry, { course: query.course });
           if (retryPick.status === 'ok' && retryPick.candidate?.legacyId === candidate.legacyId) {
-            const retryReviews = extractReviews(retryPick.candidate);
-            if (retryReviews.length) reviews = retryReviews;
+            const retryData = extractReviewData(retryPick.candidate);
+            if (retryData.reviews.length || retryData.recentRatings.length) {
+              reviews = retryData.reviews;
+              recentRatings = retryData.recentRatings;
+            }
           }
         } catch {
           /* keep original */
@@ -193,6 +213,7 @@ export class RmpProvider extends RatingProvider {
           candidate.wouldTakeAgainPercent >= 0 ? Math.round(candidate.wouldTakeAgainPercent) : undefined,
         tags: tags.length ? tags : undefined,
         reviews: reviews.length ? reviews : undefined,
+        recentRatings: recentRatings.length ? recentRatings : undefined,
         profileUrl: candidate.legacyId
           ? `https://www.ratemyprofessors.com/professor/${candidate.legacyId}`
           : undefined,

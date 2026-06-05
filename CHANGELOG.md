@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.0-beta] — 2026-06-04
+
+Hover card polish and richer review data. See [`BETA_1.1.0.md`](./BETA_1.1.0.md).
+
+### Changed
+
+- Removed composite breakdown weight/signal rows from hover card
+- Fetch 12 recent RMP ratings (was 4); show up to 5 comment snippets (was 3)
+- Review sentiment uses all fetched star ratings (n up to 12, shown when n ≥ 3)
+- RMP cache bumped to v6; stale entries without `recentRatings` are refetched
+
+### Added
+
+- GitHub Actions workflow to build and attach extension zip on `v*` tags
+
 ## [1.0.0-beta] — 2026-06-03
 
 First documented beta baseline. See [`BETA_1.0.0.md`](./BETA_1.0.0.md) for install, verification, and known limitations.

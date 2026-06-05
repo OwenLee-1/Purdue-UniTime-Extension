@@ -18,8 +18,8 @@ export const COMPOSITE_WEIGHTS = {
   recentReviewAvg: 0.13,
 };
 
-/** Minimum review snippets with a quality score before recentReviewAvg is used. */
-export const MIN_REVIEWS_FOR_SENTIMENT = 1;
+/** Minimum recent star ratings before sentiment / composite recent-review signal is shown. */
+export const MIN_REVIEWS_FOR_SENTIMENT = 3;
 
 /**
  * Summarize recent RMP review star ratings (structured sentiment — not NLP on text).

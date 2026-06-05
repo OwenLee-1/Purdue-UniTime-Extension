@@ -1,0 +1,64 @@
+# Builds the extension and attaches a Chrome-ready zip to GitHub Releases.
+# Testers: open Releases → download the zip → unzip → chrome://extensions → Load unpacked.
+
+name: Build extension
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install and build
+        run: |
+          npm ci
+          npm run build
+
+      - name: Package dist/ for Chrome (load unpacked)
+        run: |
+          VERSION="${GITHUB_REF_NAME:-snapshot}"
+          if [ "$VERSION" = "snapshot" ] && [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="manual-$(date +%Y%m%d)"
+          fi
+          cd dist
+          zip -r "../purdue-rmp-extension-${VERSION}.zip" .
+          cd ..
+          echo "ZIP_NAME=purdue-rmp-extension-${VERSION}.zip" >> "$GITHUB_ENV"
+
+      - name: Upload workflow artifact (any run)
+        uses: actions/upload-artifact@v4
+        with:
+          name: chrome-extension-${{ github.ref_name || 'snapshot' }}
+          path: ${{ env.ZIP_NAME }}
+          retention-days: 90
+
+      - name: Attach zip to GitHub Release (tag pushes only)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ZIP_NAME }}
+          generate_release_notes: true
+          body: |
+            ## Install (no terminal required)
+
+            1. Download **`${{ env.ZIP_NAME }}`** below.
+            2. **Unzip** it (double-click on Mac, or right-click → Extract).
+            3. Open Chrome → `chrome://extensions` → turn on **Developer mode**.
+            4. Click **Load unpacked** and select the **unzipped folder** (not the `.zip`).
+            5. Open the extension popup → **Clear cached ratings** → reload your UniTime tab.
+
+            See [BETA_1.1.0.md](https://github.com/${{ github.repository }}/blob/main/BETA_1.1.0.md) for verification steps.

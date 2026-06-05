@@ -43,6 +43,7 @@
  * @property {number} [wouldTakeAgainPct]
  * @property {string[]} [tags]
  * @property {ReviewSnippet[]} [reviews]
+ * @property {ReviewSnippet[]} [recentRatings]  Star ratings for sentiment (may omit comment text).
  * @property {string} [profileUrl]
  */
 
