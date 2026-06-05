@@ -40,7 +40,9 @@ export function mergeResults(rmpRes, gradesRes, course) {
     if (merged.overall === undefined) merged.status = 'ok';
   }
 
-  const reviewSentiment = summarizeReviewSentiment(merged.detail?.reviews);
+  const reviewSentiment = summarizeReviewSentiment(
+    merged.detail?.recentRatings ?? merged.detail?.reviews
+  );
   if (reviewSentiment) merged.reviewSentiment = reviewSentiment;
 
   const composite = computeComposite({

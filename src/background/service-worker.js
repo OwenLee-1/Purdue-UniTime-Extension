@@ -8,7 +8,7 @@ import { RmpProvider } from '../core/providers/rmpProvider.js';
 import { ensureRmpRequestHeaders } from './rmpNetRules.js';
 import { lookupRmpViaOffscreen } from './offscreenFetch.js';
 
-export const BUILD_TAG = '1.0.0-beta';
+export const BUILD_TAG = '1.1.0-beta';
 
 const gradesProvider = new GradesProvider();
 const rmpProvider = new RmpProvider();
@@ -57,7 +57,8 @@ async function lookupRmp(query) {
   const stored = await getCached(pk);
   if (stored?.status === 'ok' && typeof stored.overall === 'number') {
     const missingReviews =
-      (stored.sampleSize || 0) > 0 && !(stored.detail?.reviews?.length);
+      (stored.sampleSize || 0) > 0 &&
+      (!(stored.detail?.reviews?.length) || !(stored.detail?.recentRatings?.length));
     if (!missingReviews) {
       return { ...stored, rmpFetchedIn: 'background-cache' };
     }

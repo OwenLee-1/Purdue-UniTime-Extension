@@ -297,8 +297,7 @@ export function createPopover(result, hooks = {}) {
   });
   if (composite?.score != null) {
     headline.textContent = `◎ ${composite.score.toFixed(1)} / 5 composite`;
-    headline.title =
-      'Blends RMP rating, would-take-again, course GPA, and recent review stars (see breakdown below)';
+    headline.title = 'Blends RMP rating, would-take-again, course GPA, and recent review stars';
   } else if (hasRating) {
     headline.textContent = `★ ${result.overall.toFixed(1)} / 5`;
   } else if (typeof result.gpa === 'number') {
@@ -335,21 +334,6 @@ export function createPopover(result, hooks = {}) {
       lineHeight: '1.35',
     });
     card.appendChild(rmpNote);
-  }
-
-  if (composite?.parts?.length) {
-    card.appendChild(sectionLabel('Composite breakdown'));
-    const totalWeight = composite.parts.reduce((s, p) => s + p.weight, 0);
-    for (const p of composite.parts) {
-      // RMP is shown above as its own instructor line — skip duplicate row here.
-      if (p.label === 'RMP rating' && hasRating) continue;
-
-      const weightPct = totalWeight > 0 ? Math.round((p.weight / totalWeight) * 100) : 0;
-      const signalPct = Math.round(p.normalized * 100);
-      card.appendChild(
-        row(p.label, `${p.raw} · ${weightPct}% weight · ${signalPct}% signal`)
-      );
-    }
   }
 
   const sentiment = result.reviewSentiment;

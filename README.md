@@ -4,7 +4,7 @@ Rev A: A Chrome extension that give professor data alongside each professor show
 
 
 
-> Status: **beta 1.0.0** — documented baseline [`BETA_1.0.0.md`](./BETA_1.0.0.md) · tag `v1.0.0-beta`. See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
+> Status: **beta 1.1.0** — latest release [`BETA_1.1.0.md`](./BETA_1.1.0.md) · tag `v1.1.0-beta`. Prior baseline: [`BETA_1.0.0.md`](./BETA_1.0.0.md). See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
 
 ## Overview
 
@@ -19,25 +19,24 @@ it works offline.
 - **Calendar export helper**: paste your UniTime iCalendar URL into the popup and get
 one-click "Add to Google / Apple / Outlook" links.
 
-## Installation — Beta 1.0.0
+## Installation — Beta 1.1.0
 
-**From source (recommended for this repo):**
+### For testers (download only — no terminal)
+
+1. Go to **[Releases](https://github.com/OwenLee-1/Purdue-UniTime-Extension/releases)** and download the latest **`purdue-rmp-extension-*.zip`**.
+2. **Unzip** it, then `chrome://extensions` → **Developer mode** → **Load unpacked** → select that folder.
+3. Popup → **Clear cached ratings** → reload UniTime.
+
+### For developers (build from source)
 
 ```bash
 npm install
 npm run build
 ```
 
-1. Go to `chrome://extensions` in Chrome.
-2. Turn on **Developer mode** (top-right toggle).
-3. Click **Load unpacked** and select the **`dist/`** folder (created by `npm run build`).
-4. Open the extension popup → **Clear cached ratings** once.
-5. **Reload** your UniTime class-list tab — ratings appear next to instructor names.
-6. Optional: enable **Debug** in the popup and confirm the console shows `[Purdue RMP] build 1.0.0-beta`.
+Load the **`dist/`** folder at `chrome://extensions` (not the repo root).
 
-Full verification steps: [`BETA_1.0.0.md`](./BETA_1.0.0.md).
-
-> Do not load the repo root as unpacked — Chrome needs the built `dist/` output. A Chrome Web Store install will come later.
+Full steps and verification: [`BETA_1.1.0.md`](./BETA_1.1.0.md). Pushes tagged `v*` on GitHub automatically build and attach a new zip to Releases.
 
 ### Reporting feedback (beta)
 

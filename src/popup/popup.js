@@ -17,7 +17,7 @@ const blockedListEl = document.getElementById('blockedList');
 const marksListEl = document.getElementById('marksList');
 const buildTagEl = document.getElementById('buildTag');
 
-if (buildTagEl) buildTagEl.textContent = 'Build: 1.0.0-beta';
+if (buildTagEl) buildTagEl.textContent = 'Build: 1.1.0-beta';
 
 async function renderBlockedList() {
   const list = await listBlocked();
