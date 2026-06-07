@@ -1,9 +1,9 @@
 // The little inline pill next to an instructor name.
 //
-// Pill: composite + course GPA only. RMP stars and full breakdown are in the hover card.
+// Pill: RMP ★ + course GPA at a glance. Hover for preview, click for full panel.
 
 /**
- * @param {number|undefined} score  0–5 scale (RMP or composite)
+ * @param {number|undefined} score  0–5 scale (RMP)
  */
 function colorFor(score) {
   if (score === undefined) return '#9ca3af';
@@ -75,20 +75,18 @@ export function createBadge(result) {
     return pill;
   }
 
+  const hasRmp = typeof result?.overall === 'number';
   const hasGpa = typeof result?.gpa === 'number';
-  const composite = result?.composite;
-  const hasComposite = typeof composite?.score === 'number';
 
-  if (hasComposite || hasGpa) {
+  if (hasRmp || hasGpa) {
     const parts = [];
-    if (hasComposite) parts.push(`◎ ${composite.score.toFixed(1)}`);
+    if (hasRmp) parts.push(`★ ${result.overall.toFixed(1)}`);
     if (hasGpa) parts.push(`${result.gpa.toFixed(2)} GPA`);
 
-    const headlineScore = hasComposite ? composite.score : result.gpa;
-    const bg = hasComposite ? colorFor(headlineScore) : gpaColor(result.gpa);
+    const bg = hasRmp ? colorFor(result.overall) : gpaColor(result.gpa);
     Object.assign(pill.style, { background: bg, color: '#fff' });
     pill.textContent = parts.join(' · ');
-    pill.title = 'Hover for RMP rating, breakdown, and grade distribution';
+    pill.title = 'Hover for preview · click for full details';
     applyPersonalIndicators(pill, result.userMark);
     return pill;
   }
@@ -102,10 +100,10 @@ export function createBadge(result) {
   pill.textContent = status === 'fetch_failed' ? '!' : '?';
   pill.title =
     status === 'ambiguous'
-      ? 'Multiple professors match this name — not shown to avoid a wrong match.'
+      ? 'Multiple professors match this name — click for details.'
       : status === 'fetch_failed'
-        ? "Couldn't reach RateMyProfessors."
-        : 'No confident RateMyProfessors match.';
+        ? "Couldn't reach RateMyProfessors. Click for details."
+        : 'No confident RateMyProfessors match. Click for details.';
   applyPersonalIndicators(pill, result.userMark);
   return pill;
 }

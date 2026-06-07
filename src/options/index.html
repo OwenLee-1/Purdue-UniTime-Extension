@@ -7,22 +7,110 @@
     <style>
       body {
         font-family: system-ui, sans-serif;
-        max-width: 520px;
-        margin: 40px auto;
-        padding: 0 20px;
+        max-width: 640px;
+        margin: 0 auto;
+        padding: 32px 20px 48px;
         color: #111827;
         line-height: 1.5;
+        background: #f9fafb;
       }
-      h1 { font-size: 18px; }
-      p { font-size: 14px; color: #374151; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      .sub { color: #6b7280; font-size: 13px; margin: 0 0 24px; }
+      section {
+        background: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 10px;
+        padding: 16px 18px;
+        margin-bottom: 16px;
+      }
+      h2 { font-size: 15px; margin: 0 0 12px; }
+      .row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin: 10px 0;
+      }
+      label { font-size: 14px; }
+      .hint { font-size: 12px; color: #6b7280; margin: 4px 0 0; }
+      .placeholder {
+        font-size: 13px;
+        color: #9ca3af;
+        font-style: italic;
+        padding: 8px 0;
+      }
+      button {
+        padding: 8px 14px;
+        font-size: 13px;
+        font-family: inherit;
+        border: 1px solid #d1d5db;
+        border-radius: 8px;
+        background: #f9fafb;
+        cursor: pointer;
+      }
+      button:hover { background: #f3f4f6; }
+      #status { font-size: 12px; color: #16a34a; min-height: 16px; margin-top: 8px; }
+      a { color: #2563eb; }
     </style>
   </head>
   <body>
-    <h1>Purdue RMP — Settings</h1>
-    <p>
-      This is the settings page. More options (clearing the rating cache,
-      reporting a wrong match, etc.) will be added in later milestones.
-    </p>
+    <h1>Purdue RMP Settings</h1>
+    <p class="sub" id="buildTag">Build: 1.3.0-beta</p>
+
+    <section>
+      <h2>Display</h2>
+      <div class="row">
+        <label for="enabled">Show ratings on UniTime</label>
+        <input type="checkbox" id="enabled" checked />
+      </div>
+      <div class="row">
+        <label for="hideOverlay">Hide UniTime schedule preview on hover</label>
+        <input type="checkbox" id="hideOverlay" />
+      </div>
+      <p class="hint">Reload your UniTime tab after changing display options.</p>
+      <div class="row">
+        <label for="debug">Debug mode</label>
+        <input type="checkbox" id="debug" />
+      </div>
+    </section>
+
+    <section>
+      <h2>Professor details</h2>
+      <p class="hint">Hover a badge for a quick preview; click for the full right-hand panel (marks, hide professor, all reviews).</p>
+      <div class="row">
+        <label for="aiReviewSummaries">AI-shorten review comments</label>
+        <input type="checkbox" id="aiReviewSummaries" checked />
+      </div>
+      <p class="hint">
+        Applies to the hover preview and side panel. Uses Chrome&apos;s built-in Summarizer (Gemini Nano) when available
+        (Chrome 138+ desktop with AI features enabled). Falls back to plain truncation otherwise.
+      </p>
+    </section>
+
+    <section>
+      <h2>Data &amp; cache</h2>
+      <button id="clearCache">Clear cached ratings</button>
+      <p class="hint">Forces fresh RateMyProfessors lookups. Your hidden professors and personal marks are kept.</p>
+      <div class="placeholder">Coming soon: export/import personal marks.</div>
+    </section>
+
+    <section>
+      <h2>Calendar</h2>
+      <p class="hint">
+        While you browse UniTime, the extension watches for iCalendar export URLs and saves them automatically.
+        Use the toolbar popup to add the schedule to Google, Apple, or Outlook.
+      </p>
+      <p class="hint" id="icalStatus">Checking saved calendar URL…</p>
+    </section>
+
+    <section>
+      <h2>About</h2>
+      <p class="hint">
+        <a href="https://github.com/OwenLee-1/Purdue-UniTime-Extension" target="_blank" rel="noopener">GitHub repository</a>
+        · Beta feedback welcome via Issues.
+      </p>
+    </section>
+
+    <div id="status"></div>
     <script type="module" src="./options.js"></script>
   </body>
 </html>

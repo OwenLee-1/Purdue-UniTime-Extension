@@ -4,7 +4,7 @@ import offscreenUrl from '../offscreen/index.html?script';
 
 let creatingOffscreen = null;
 
-async function ensureOffscreenDocument() {
+export async function ensureOffscreenDocument() {
   if (creatingOffscreen) return creatingOffscreen;
 
   creatingOffscreen = (async () => {
@@ -16,7 +16,7 @@ async function ensureOffscreenDocument() {
     await chrome.offscreen.createDocument({
       url: offscreenUrl,
       reasons: ['DOM_SCRAPING'],
-      justification: 'Fetch RateMyProfessors ratings for Purdue timetable rows',
+      justification: 'Fetch RMP ratings and summarize review text with Chrome built-in AI',
     });
   })();
 
@@ -47,6 +47,31 @@ export async function lookupRmpViaOffscreen(query) {
         return;
       }
       resolve({ ...response.result, rmpFetchedIn: 'offscreen' });
+    });
+  });
+}
+
+/**
+ * @param {string[]} texts
+ * @returns {Promise<{ ok: boolean, summaries?: string[], engine?: string, error?: string }>}
+ */
+export async function summarizeReviewsViaOffscreen(texts) {
+  const list = (texts || []).map((t) => String(t || '').trim()).filter(Boolean);
+  if (!list.length) return { ok: true, summaries: [] };
+
+  await ensureOffscreenDocument();
+
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: 'SUMMARIZE_REVIEWS_OFFSCREEN', texts: list }, (response) => {
+      if (chrome.runtime.lastError) {
+        resolve({ ok: false, error: chrome.runtime.lastError.message });
+        return;
+      }
+      resolve(
+        response && typeof response === 'object'
+          ? response
+          : { ok: false, error: 'No summarizer response' }
+      );
     });
   });
 }

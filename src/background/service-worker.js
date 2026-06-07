@@ -6,9 +6,9 @@ import { lookupKey } from '../core/lookupKey.js';
 import { GradesProvider } from '../core/providers/gradesProvider.js';
 import { RmpProvider } from '../core/providers/rmpProvider.js';
 import { ensureRmpRequestHeaders } from './rmpNetRules.js';
-import { lookupRmpViaOffscreen } from './offscreenFetch.js';
+import { lookupRmpViaOffscreen, summarizeReviewsViaOffscreen } from './offscreenFetch.js';
 
-export const BUILD_TAG = '1.1.0-beta';
+export const BUILD_TAG = '1.3.0-beta';
 
 const gradesProvider = new GradesProvider();
 const rmpProvider = new RmpProvider();
@@ -140,7 +140,9 @@ async function handleRmpBatch(queries) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   // Handled by the offscreen document.
-  if (message?.type === 'RMP_OFFSCREEN_LOOKUP') return undefined;
+  if (message?.type === 'RMP_OFFSCREEN_LOOKUP' || message?.type === 'SUMMARIZE_REVIEWS_OFFSCREEN') {
+    return undefined;
+  }
 
   if (message?.type === 'PING') {
     sendResponse({ ok: true, build: BUILD_TAG });
@@ -179,6 +181,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message?.type === 'RMP_PROBE') {
     runWhenRmpSlot(() => rmpProvider.lookup({ rawName: message.rawName || 'Weng' }))
       .then((result) => sendResponse({ ok: true, result }))
+      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    return true;
+  }
+
+  if (message?.type === 'SUMMARIZE_REVIEWS') {
+    summarizeReviewsViaOffscreen(message.texts || [])
+      .then((result) => sendResponse(result))
       .catch((err) => sendResponse({ ok: false, error: String(err) }));
     return true;
   }

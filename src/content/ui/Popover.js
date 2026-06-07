@@ -1,8 +1,8 @@
-// The hover card that reveals the richer details when you mouse over a badge.
+// Hover preview card (and legacy full popover) for professor details.
 //
-// Shows would-take-again %, number of ratings, department, top tags (when RMP
-// has them), and a link to the full RateMyProfessors profile. Rendered inside
-// the badge's shadow root so its styling stays isolated from UniTime.
+// `previewOnly` mode: read-only glance on badge hover; click opens the side panel.
+
+import { fallbackShortenReview, shortenReviewBatch } from '../../core/reviewSummarizer.js';
 
 function colorFor(overall) {
   if (overall === undefined) return '#9ca3af';
@@ -84,10 +84,26 @@ function gradeDistribution(dist) {
 }
 
 /**
+ * @param {import('../../core/providers/Provider.js').ReviewSnippet[]} reviews
+ * @param {HTMLElement[]} textEls
+ */
+function hydratePreviewReviewSummaries(reviews, textEls) {
+  shortenReviewBatch(reviews)
+    .then((summaries) => {
+      summaries.forEach((summary, i) => {
+        if (textEls[i] && summary) textEls[i].textContent = summary;
+      });
+    })
+    .catch(() => {});
+}
+
+/**
  * A single RMP review snippet.
  * @param {import('../../core/providers/Provider.js').ReviewSnippet} review
+ * @param {{ shorten?: boolean }} [opts]
+ * @returns {{ el: HTMLDivElement, body: HTMLDivElement }}
  */
-function reviewSnippet(review) {
+function reviewSnippet(review, opts = {}) {
   const el = document.createElement('div');
   Object.assign(el.style, {
     background: '#1f2937',
@@ -116,7 +132,7 @@ function reviewSnippet(review) {
   el.appendChild(meta);
 
   const body = document.createElement('div');
-  body.textContent = review.comment;
+  body.textContent = opts.shorten ? fallbackShortenReview(review.comment) : review.comment;
   Object.assign(body.style, {
     fontSize: '11px',
     lineHeight: '1.4',
@@ -129,7 +145,7 @@ function reviewSnippet(review) {
   });
   el.appendChild(body);
 
-  return el;
+  return { el, body };
 }
 
 /**
@@ -139,6 +155,7 @@ function reviewSnippet(review) {
  * @property {(blocked: boolean) => void | Promise<void>} [onBlockToggle]
  * @property {import('../../core/userMarks.js').UserMark | null} [userMark]
  * @property {(mark: import('../../core/userMarks.js').UserMark | null) => void | Promise<void>} [onMarkUpdate]
+ * @property {boolean} [previewOnly]  Hover glance — no actions, fewer reviews, click hint.
  */
 
 /**
@@ -388,9 +405,31 @@ export function createPopover(result, hooks = {}) {
   }
 
   // Recent student comments (from RateMyProfessors).
-  if (detail.reviews?.length) {
+  const reviewList = hooks.previewOnly ? (detail.reviews || []).slice(0, 2) : detail.reviews;
+  /** @type {HTMLElement[]} */
+  const previewReviewBodies = [];
+  if (reviewList?.length) {
     card.appendChild(sectionLabel('Recent comments'));
-    detail.reviews.forEach((rev) => card.appendChild(reviewSnippet(rev)));
+    if (hooks.previewOnly) {
+      const previewHint = document.createElement('div');
+      previewHint.textContent = 'AI-shortened when available — click badge for full panel.';
+      Object.assign(previewHint.style, { color: '#6b7280', fontSize: '10px', marginBottom: '4px' });
+      card.appendChild(previewHint);
+    }
+    reviewList.forEach((rev) => {
+      const snippet = reviewSnippet(rev, { shorten: !!hooks.previewOnly });
+      card.appendChild(snippet.el);
+      if (hooks.previewOnly) previewReviewBodies.push(snippet.body);
+    });
+    if (hooks.previewOnly && previewReviewBodies.length) {
+      hydratePreviewReviewSummaries(reviewList, previewReviewBodies);
+    }
+    if (hooks.previewOnly && (detail.reviews?.length || 0) > reviewList.length) {
+      const more = document.createElement('div');
+      more.textContent = `+${detail.reviews.length - reviewList.length} more in full panel`;
+      Object.assign(more.style, { color: '#6b7280', fontSize: '10px', marginTop: '4px' });
+      card.appendChild(more);
+    }
   } else if (result.sampleSize > 0) {
     const hint = document.createElement('div');
     hint.textContent = 'No review text returned from RateMyProfessors for this match.';
@@ -398,11 +437,11 @@ export function createPopover(result, hooks = {}) {
     card.appendChild(hint);
   }
 
-  if (hooks.rawName && hooks.onMarkUpdate) {
+  if (!hooks.previewOnly && hooks.rawName && hooks.onMarkUpdate) {
     card.appendChild(personalMarksSection(hooks));
   }
 
-  if (hooks.rawName && hooks.onBlockToggle) {
+  if (!hooks.previewOnly && hooks.rawName && hooks.onBlockToggle) {
     const blockBtn = document.createElement('button');
     blockBtn.type = 'button';
     blockBtn.textContent = hooks.isBlocked ? 'Unhide this professor' : 'Hide this professor';
@@ -428,6 +467,21 @@ export function createPopover(result, hooks = {}) {
     const hint = document.createElement('div');
     hint.textContent = 'Hidden sections disappear from your class list until you unhide.';
     Object.assign(hint.style, { color: '#6b7280', fontSize: '10px', marginTop: '4px' });
+    card.appendChild(hint);
+  }
+
+  if (hooks.previewOnly) {
+    const hint = document.createElement('div');
+    hint.textContent = 'Click badge for full panel →';
+    Object.assign(hint.style, {
+      marginTop: '10px',
+      paddingTop: '8px',
+      borderTop: '1px solid #374151',
+      color: '#9ca3af',
+      fontSize: '10px',
+      fontWeight: '600',
+      letterSpacing: '0.02em',
+    });
     card.appendChild(hint);
   }
 

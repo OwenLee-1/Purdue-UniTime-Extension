@@ -7,7 +7,7 @@ import { normalizeName } from '../core/matching.js';
 import { mergeResults } from '../core/mergeResult.js';
 import { sendToBackground, wakeBackground } from '../shared/extensionMessaging.js';
 
-export const BUILD_TAG = '1.1.0-beta';
+export const BUILD_TAG = '1.3.0-beta';
 
 /** Merged results per professor+course (badge waiters). */
 /** @type {Map<string, object>} */

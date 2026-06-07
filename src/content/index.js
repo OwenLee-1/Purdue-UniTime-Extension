@@ -15,6 +15,7 @@ import {
   onProfessorRmpReady,
   hasWarmMergedCache,
 } from './lookup.js';
+import { startIcalScraper } from './icalScraper.js';
 
 /** @type {Set<import('./injector.js').BadgeHandle>} */
 const badgeHandles = new Set();
@@ -83,6 +84,7 @@ function refreshBadgesForProfessor(pk) {
 
 async function boot() {
   initOverlayControl();
+  startIcalScraper();
 
   onProfessorRmpReady((pk) => refreshBadgesForProfessor(pk));
 
@@ -190,4 +192,21 @@ async function boot() {
   });
 }
 
-boot();
+let bootStarted = false;
+
+async function startOnce() {
+  if (bootStarted) return;
+  bootStarted = true;
+  try {
+    await boot();
+  } catch (err) {
+    console.error('[Purdue RMP] boot failed:', err);
+  }
+}
+
+/** @crxjs content-script entry (loader calls this). */
+export function onExecute() {
+  return startOnce();
+}
+
+startOnce();

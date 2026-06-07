@@ -1,9 +1,23 @@
 // The "hands" of the on-page helper: it places a badge into the page.
 
 import { createBadge } from './ui/Badge.js';
-import { createPopover } from './ui/Popover.js';
+import {
+  openProfessorSidebar,
+  closeProfessorSidebar,
+  refreshProfessorSidebar,
+  isSidebarOpenFor,
+} from './ui/sidebarManager.js';
+import {
+  hideHoverPreview,
+  showHoverPreview,
+  refreshHoverPreview,
+  isHoverPreviewOpenFor,
+  scheduleHideHoverPreview,
+} from './ui/hoverPreviewManager.js';
 import { setBlocked, isBlocked } from '../core/blocks.js';
 import { getMark, updateMark } from '../core/userMarks.js';
+
+const HOVER_SHOW_DELAY_MS = 280;
 
 /**
  * @typedef {Object} BadgeHandle
@@ -37,6 +51,7 @@ export function injectBadge(target, ctx = {}) {
   host.style.marginLeft = '6px';
   host.style.display = 'inline-block';
   host.style.verticalAlign = 'middle';
+  host.style.cursor = 'pointer';
 
   const shadow = host.attachShadow({ mode: 'open' });
   let current = createBadge({ status: 'loading' });
@@ -44,8 +59,8 @@ export function injectBadge(target, ctx = {}) {
   target.appendChild(host);
 
   let latest = { status: 'loading', displayName: ctx.rawName, userMark: null };
-  let popover = null;
-  let hideTimer = null;
+  /** @type {ReturnType<typeof setTimeout> | null} */
+  let hoverShowTimer = null;
 
   function renderBadge() {
     const next = createBadge(latest);
@@ -53,46 +68,35 @@ export function injectBadge(target, ctx = {}) {
     current = next;
   }
 
-  function positionPopover() {
-    if (!popover) return;
-    const rect = host.getBoundingClientRect();
-    const below = window.innerHeight - rect.bottom;
-    popover.style.left = `${Math.max(8, rect.left)}px`;
-    if (below < 280) {
-      popover.style.top = '';
-      popover.style.bottom = `${window.innerHeight - rect.top + 6}px`;
-    } else {
-      popover.style.bottom = '';
-      popover.style.top = `${rect.bottom + 6}px`;
+  function clearHoverShowTimer() {
+    if (hoverShowTimer) {
+      clearTimeout(hoverShowTimer);
+      hoverShowTimer = null;
     }
   }
 
-  async function applyMarkPatch(patch) {
-    if (!ctx.rawName) return;
-    const mark = await updateMark(ctx.rawName, patch);
-    latest = { ...latest, userMark: mark };
-    renderBadge();
-    if (popover) {
-      popover.remove();
-      popover = null;
-    }
+  function scheduleHoverPreview() {
+    if (isSidebarOpenFor(host)) return;
+    clearHoverShowTimer();
+    hoverShowTimer = setTimeout(() => {
+      hoverShowTimer = null;
+      showHoverPreview(host, latest);
+    }, HOVER_SHOW_DELAY_MS);
   }
 
-  async function showPopover() {
-    if (latest.status === 'loading' || latest.status === 'staff_tba') return;
-    if (hideTimer) {
-      clearTimeout(hideTimer);
-      hideTimer = null;
-    }
-    if (popover) return;
+  function onHostMouseLeave() {
+    clearHoverShowTimer();
+    scheduleHideHoverPreview();
+  }
 
+  async function panelHooks() {
     const [blocked, userMark] = await Promise.all([
       ctx.rawName ? isBlocked(ctx.rawName) : false,
       ctx.rawName ? getMark(ctx.rawName) : null,
     ]);
     latest.userMark = userMark;
 
-    popover = createPopover(latest, {
+    return {
       rawName: ctx.rawName,
       isBlocked: blocked,
       userMark,
@@ -101,48 +105,57 @@ export function injectBadge(target, ctx = {}) {
         if (!ctx.rawName) return;
         await setBlocked(ctx.rawName, nextBlocked);
         if (ctx.onBlockToggle) await ctx.onBlockToggle(nextBlocked);
-        hidePopover();
+        closeProfessorSidebar();
       },
-    });
-    popover.addEventListener('mouseenter', () => {
-      if (hideTimer) {
-        clearTimeout(hideTimer);
-        hideTimer = null;
-      }
-    });
-    popover.addEventListener('mouseleave', scheduleHide);
-    document.body.appendChild(popover);
-    positionPopover();
+    };
   }
 
-  function hidePopover() {
-    if (popover) {
-      popover.remove();
-      popover = null;
+  async function applyMarkPatch(patch) {
+    if (!ctx.rawName) return;
+    const mark = await updateMark(ctx.rawName, patch);
+    latest = { ...latest, userMark: mark };
+    renderBadge();
+    if (isSidebarOpenFor(host)) {
+      const hooks = await panelHooks();
+      refreshProfessorSidebar(latest, hooks, host);
     }
   }
 
-  function scheduleHide() {
-    hideTimer = setTimeout(hidePopover, 150);
+  async function toggleSidebar() {
+    if (latest.status === 'loading' || latest.status === 'staff_tba') return;
+    hideHoverPreview();
+    const hooks = await panelHooks();
+    openProfessorSidebar(latest, hooks, host);
   }
 
-  host.addEventListener('mouseenter', showPopover);
-  host.addEventListener('mouseleave', scheduleHide);
+  host.addEventListener('mouseenter', scheduleHoverPreview);
+  host.addEventListener('mouseleave', onHostMouseLeave);
+
+  shadow.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    clearHoverShowTimer();
+    hideHoverPreview();
+    toggleSidebar();
+  });
 
   return {
     async setResult(result) {
       if (result?.status === 'staff_tba') {
         host.remove();
-        hidePopover();
+        if (isHoverPreviewOpenFor(host)) hideHoverPreview();
+        if (isSidebarOpenFor(host)) closeProfessorSidebar();
         return;
       }
       const userMark = ctx.rawName ? await getMark(ctx.rawName) : null;
       latest = { ...result, displayName: result.displayName || ctx.rawName, userMark };
       renderBadge();
-      if (popover) {
-        const reopen = host.matches(':hover');
-        hidePopover();
-        if (reopen) showPopover();
+      if (isHoverPreviewOpenFor(host)) {
+        refreshHoverPreview(host, latest);
+      }
+      if (isSidebarOpenFor(host)) {
+        const hooks = await panelHooks();
+        refreshProfessorSidebar(latest, hooks, host);
       }
     },
     refreshMark(mark) {
@@ -150,7 +163,8 @@ export function injectBadge(target, ctx = {}) {
       renderBadge();
     },
     remove() {
-      hidePopover();
+      if (isHoverPreviewOpenFor(host)) hideHoverPreview();
+      if (isSidebarOpenFor(host)) closeProfessorSidebar();
       host.remove();
     },
   };

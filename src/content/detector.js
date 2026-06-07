@@ -36,6 +36,72 @@ const NON_INSTRUCTOR_TOKENS = new Set([
   'hybrid',
 ]);
 
+/** Purdue subject prefixes — lone tokens like "MA" are not people. */
+const SUBJECT_PREFIXES = new Set([
+  'ma',
+  'cs',
+  'ece',
+  'ee',
+  'me',
+  'aae',
+  'phys',
+  'chem',
+  'biol',
+  'stat',
+  'mgmt',
+  'mkt',
+  'fin',
+  'ad',
+  'com',
+  'engl',
+  'hist',
+  'pol',
+  'econ',
+  'psych',
+  'soc',
+  'anth',
+  'phil',
+  'mus',
+  'thtr',
+  'art',
+  'arch',
+  'ce',
+  'ie',
+  'mde',
+  'nucl',
+  'ne',
+]);
+
+/**
+ * @param {string} text
+ */
+function looksLikeCourseTitle(text) {
+  const lower = text.toLowerCase();
+  if (/\b(introduction|fundamentals|principles|seminar|topics|honors|independent)\b/.test(lower)) {
+    return true;
+  }
+  if (/\s+to\s+/i.test(text)) return true;
+  if (
+    /\b(engineering|science|mathematics|physics|chemistry|programming|analysis|calculus|design|methods)\b/i.test(
+      lower
+    ) &&
+    text.split(/\s+/).length >= 2
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Prefer link text inside UniTime instructor cells when present.
+ * @param {Element} cell
+ */
+function readInstructorCellText(cell) {
+  const link = cell.querySelector('a[href]');
+  if (link?.textContent?.trim()) return link.textContent.trim();
+  return (cell.textContent || '').trim();
+}
+
 /**
  * @typedef {Object} InstructorCandidate
  * @property {string} text
@@ -77,16 +143,29 @@ function findScheduleTables() {
  * @param {string} text
  */
 function looksLikeInstructorName(text) {
-  const t = text.trim();
+  const t = text
+    .trim()
+    .replace(/\s*\([^)]*\)\s*/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (t.length < 3 || t.length > 80) return false;
   if (!/[a-zA-Z]/.test(t)) return false;
   if (!/^[a-zA-Z][a-zA-Z.'\-\s,]+$/.test(t)) return false;
 
   const lower = t.toLowerCase();
   if (NON_INSTRUCTOR_TOKENS.has(lower)) return false;
+  if (looksLikeCourseTitle(t)) return false;
+
+  const words = t.split(/\s+/).filter(Boolean);
+  if (words.length === 1 && SUBJECT_PREFIXES.has(words[0].toLowerCase())) return false;
 
   // Real instructors are "S Weng", "D L Johnstone", or "Last, First" — not lone section types.
   if (!t.includes(' ') && !t.includes(',')) return false;
+
+  if (!t.includes(',')) {
+    const hasInitial = words.some((w) => w.length <= 2 && /^[A-Z]\.?$/.test(w));
+    if (!hasInitial && words.length > 3) return false;
+  }
 
   return true;
 }
@@ -154,7 +233,7 @@ function readCourseFromRow(row, subjectIdx, courseIdx, lastSubject, lastNumber) 
  */
 function findInstructorOnRow(cells, instructorIdx, opts = {}) {
   if (cells.length > instructorIdx) {
-    const text = primaryInstructorText((cells[instructorIdx].textContent || '').trim());
+    const text = primaryInstructorText(readInstructorCellText(cells[instructorIdx]));
     if (looksLikeInstructorName(text)) {
       return { cell: cells[instructorIdx], text };
     }
@@ -164,7 +243,7 @@ function findInstructorOnRow(cells, instructorIdx, opts = {}) {
   if (!opts.spillover) return null;
 
   for (const cell of cells) {
-    const text = primaryInstructorText((cell.textContent || '').trim());
+    const text = primaryInstructorText(readInstructorCellText(cell));
     if (looksLikeInstructorName(text)) return { cell, text };
   }
   return null;

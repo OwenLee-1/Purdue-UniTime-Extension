@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.3.0-beta] — 2026-06-04
+
+Alpha feedback completion: hover preview restored, AI summaries, auto iCal. See [`BETA_1.3.0.md`](./BETA_1.3.0.md).
+
+### Added
+
+- Hover preview card on badge hover (read-only glance) alongside click-to-open side panel
+- AI-shortened RMP comments in hover preview and side panel (Chrome Summarizer + fallback)
+- Auto-detect UniTime iCalendar URL from export dialog, page scan, and clipboard
+- Settings toggle for AI review summaries; calendar auto-detect status on options page
+
+### Changed
+
+- Professor UX: hover = preview, click = full panel (replaces click-only 1.2.0 behavior)
+- Popup and README copy updated for hover + panel workflow
+
+## [1.2.0-beta] — 2026-06-04
+
+Alpha tester UX pass. See [`BETA_1.2.0.md`](./BETA_1.2.0.md).
+
+### Changed
+
+- Hover popover → click-to-open right-hand professor panel (full-height, scrollable)
+- Badge shows `★ RMP · GPA` instead of composite ◎ symbol
+- Review previews shortened; link to full RMP discussion
+- Stricter instructor name detection (course titles, subject tokens, cell link text)
+- Calendar export: separate Google / Apple / Outlook web; `chrome.tabs` for `webcal://`
+
+### Added
+
+- Settings / options page with display toggles and coming-soon sections
+- Settings link in popup
+
+### Fixed
+
+- npm high-severity rollup advisory via package override (dev dependency)
+
 ## [1.1.0-beta] — 2026-06-04
 
 Hover card polish and richer review data. See [`BETA_1.1.0.md`](./BETA_1.1.0.md).

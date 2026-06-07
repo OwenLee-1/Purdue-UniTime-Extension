@@ -48,7 +48,7 @@
   </head>
   <body>
     <h1>★ Purdue RMP</h1>
-    <p class="sub">Inline RateMyProfessors ratings on UniTime</p>
+    <p class="sub">Hover badges for a preview · click for full details</p>
     <p class="hint" id="buildTag" style="margin-top:4px"></p>
 
     <div class="row">
@@ -70,18 +70,20 @@
     <hr />
 
     <label style="font-size: 13px; font-weight: 600;">Add schedule to your calendar</label>
-    <p class="hint">In UniTime: Personal Schedule → Export → "Copy iCalendar URL", then paste it below.</p>
+    <p class="hint">Open UniTime Export → iCalendar — the URL is saved automatically. You can also paste below.</p>
     <input
       type="text"
       id="icalUrl"
       placeholder="Paste UniTime iCalendar URL"
       style="width: 100%; box-sizing: border-box; padding: 6px 8px; font-size: 12px; border: 1px solid #d1d5db; border-radius: 6px; margin-bottom: 6px;"
     />
-    <div style="display: flex; gap: 6px;">
-      <button id="addGoogle" style="flex: 1;">Google</button>
-      <button id="addApple" style="flex: 1;">Apple / Outlook</button>
+    <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+      <button id="addGoogle" style="flex: 1; min-width: 70px;">Google</button>
+      <button id="addApple" style="flex: 1; min-width: 70px;">Apple</button>
+      <button id="addOutlook" style="flex: 1; min-width: 70px;">Outlook</button>
     </div>
     <div id="calStatus" class="hint" style="text-align: center;"></div>
+    <p class="hint">If Google Calendar won&apos;t subscribe, stay logged into myPurdue or paste the URL into Google manually.</p>
 
     <hr />
 
@@ -90,7 +92,7 @@
     <div id="blockedList" class="hint" style="margin-bottom: 8px;">None</div>
 
     <label style="font-size: 13px; font-weight: 600; margin-top: 8px;">Your marked professors</label>
-    <p class="hint">Like/dislike and "had before" marks from the hover card.</p>
+    <p class="hint">Like/dislike and &quot;had before&quot; marks from the side panel (click a badge).</p>
     <div id="marksList" class="hint" style="margin-bottom: 8px;">None</div>
 
     <hr />
@@ -99,7 +101,9 @@
     <div id="status"></div>
 
     <div class="footer">
-      <a id="reportLink" href="#" target="_blank" rel="noopener noreferrer">Report a wrong match</a>
+      <a id="settingsLink" href="#">Settings</a>
+      ·
+      <a id="reportLink" href="#" rel="noopener noreferrer">Report a wrong match</a>
     </div>
 
     <script type="module" src="./popup.js"></script>
