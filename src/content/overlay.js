@@ -1,26 +1,21 @@
-// Controls UniTime's on-hover weekly "schedule preview" (the SuggestionsHintWidget),
-// which pops up a what-if time grid when you hover a class/suggestion and clutters
-// the screen.
+// UniTime on-page quick settings (bottom-right) + schedule-preview hiding.
 //
-// Identified via the [RMP-OVERLAY] discovery probe:
-//   <div class="unitime-SuggestionsHint">              <- the pale-yellow box (bg rgb(255,253,221))
-//     <div class="unitime-TimeGrid unitime-SuggestionsHintWidget"> <- inner what-if grid
-//
-// Hiding the outer .unitime-SuggestionsHint removes the whole yellow preview; we
-// include the inner widget class too for robustness.
-//
-// We give the user two ways to hide it: the popup toggle AND a small on-page
-// button so they can flip it on/off without opening the popup.
+// The floating menu replaces the old single "hide schedule preview" pill so testers
+// can reach common toggles without opening the toolbar popup.
+
+import { AI_SUMMARIES_STORAGE_KEY } from '../core/reviewSummarizer.js';
+import { sendToBackground } from '../shared/extensionMessaging.js';
 
 export const OVERLAY_SELECTOR = '.unitime-SuggestionsHint, .unitime-SuggestionsHintWidget';
 
-const STORAGE_KEY = 'hideOverlay';
+const HIDE_OVERLAY_KEY = 'hideOverlay';
+const ENABLED_KEY = 'enabled';
+
 let styleEl = null;
-let updateButtonLabel = null;
+/** @type {(() => void) | null} */
+let syncMenuFromStorage = null;
 
 /**
- * Apply or remove the CSS that hides the preview. Uses !important so it wins over
- * UniTime's inline styles when GWT tries to show the widget.
  * @param {boolean} hide
  */
 export function applyOverlayHiding(hide) {
@@ -37,65 +32,264 @@ export function applyOverlayHiding(hide) {
 }
 
 /**
- * Build the small floating on-page toggle button (mounted in a shadow root so its
- * styling stays isolated from UniTime).
- * @param {boolean} hidden  Current state.
+ * @param {ParentNode} root
+ * @param {string} label
+ * @param {string} hint
+ * @param {string} storageKey
+ * @param {{ reloadHint?: boolean }} [opts]
  */
-function mountToggleButton(hidden) {
+function mountToggleRow(root, label, hint, storageKey, opts = {}) {
+  const row = document.createElement('label');
+  Object.assign(row.style, {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '10px',
+    padding: '8px 0',
+    borderBottom: '1px solid #374151',
+    cursor: 'pointer',
+  });
+
+  const text = document.createElement('div');
+  text.style.flex = '1';
+  const title = document.createElement('div');
+  title.textContent = label;
+  Object.assign(title.style, { fontSize: '12px', fontWeight: '600', color: '#f9fafb' });
+  text.appendChild(title);
+  if (hint) {
+    const sub = document.createElement('div');
+    sub.textContent = hint;
+    Object.assign(sub.style, { fontSize: '10px', color: '#9ca3af', marginTop: '2px', lineHeight: '1.35' });
+    text.appendChild(sub);
+  }
+
+  const box = document.createElement('input');
+  box.type = 'checkbox';
+  box.dataset.storageKey = storageKey;
+  if (opts.reloadHint) box.dataset.reloadHint = '1';
+  box.style.marginTop = '2px';
+  box.style.flexShrink = '0';
+
+  box.addEventListener('click', (e) => e.stopPropagation());
+  box.addEventListener('change', async () => {
+    await chrome.storage.local.set({ [storageKey]: box.checked });
+  });
+
+  row.append(text, box);
+  root.appendChild(row);
+  return box;
+}
+
+function mountSettingsMenu(initial) {
   const host = document.createElement('div');
-  host.id = 'rmp-overlay-toggle-host';
+  host.id = 'rmp-page-settings-host';
   const shadow = host.attachShadow({ mode: 'open' });
 
-  const btn = document.createElement('button');
-  Object.assign(btn.style, {
+  const wrap = document.createElement('div');
+  Object.assign(wrap.style, {
     position: 'fixed',
     bottom: '16px',
     right: '16px',
     zIndex: '2147483647',
-    padding: '7px 12px',
+    fontFamily: 'system-ui, sans-serif',
+  });
+
+  const panel = document.createElement('div');
+  Object.assign(panel.style, {
+    display: 'none',
+    position: 'absolute',
+    right: '0',
+    bottom: '44px',
+    width: 'min(280px, calc(100vw - 32px))',
+    boxSizing: 'border-box',
+    background: '#111827',
+    color: '#f9fafb',
+    borderRadius: '12px',
+    boxShadow: '0 12px 32px rgba(0,0,0,0.35)',
+    padding: '12px 14px',
+    border: '1px solid #374151',
+  });
+
+  const header = document.createElement('div');
+  Object.assign(header.style, {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '4px',
+  });
+  const heading = document.createElement('div');
+  heading.textContent = 'Purdue RMP';
+  Object.assign(heading.style, { fontWeight: '700', fontSize: '13px' });
+  const closeBtn = document.createElement('button');
+  closeBtn.type = 'button';
+  closeBtn.textContent = '✕';
+  Object.assign(closeBtn.style, {
+    border: 'none',
+    background: '#374151',
+    color: '#f9fafb',
+    width: '24px',
+    height: '24px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    fontSize: '12px',
+  });
+  header.append(heading, closeBtn);
+  panel.appendChild(header);
+
+  const sub = document.createElement('div');
+  sub.textContent = 'Quick settings';
+  Object.assign(sub.style, { fontSize: '10px', color: '#9ca3af', marginBottom: '6px' });
+  panel.appendChild(sub);
+
+  const toggles = document.createElement('div');
+  const hideBox = mountToggleRow(
+    toggles,
+    'Hide schedule preview',
+    'UniTime weekly grid on class hover',
+    HIDE_OVERLAY_KEY
+  );
+  const enabledBox = mountToggleRow(
+    toggles,
+    'Show ratings',
+    'Reload UniTime after changing',
+    ENABLED_KEY,
+    { reloadHint: true }
+  );
+  const aiBox = mountToggleRow(
+    toggles,
+    'AI-shorten reviews',
+    'Hover preview and side panel',
+    AI_SUMMARIES_STORAGE_KEY
+  );
+  panel.appendChild(toggles);
+
+  const note = document.createElement('div');
+  note.hidden = true;
+  Object.assign(note.style, {
+    fontSize: '10px',
+    color: '#fbbf24',
+    marginTop: '8px',
+    lineHeight: '1.35',
+  });
+  note.textContent = 'Reload UniTime to apply the ratings toggle.';
+  panel.appendChild(note);
+
+  const fullBtn = document.createElement('button');
+  fullBtn.type = 'button';
+  fullBtn.textContent = 'Open full settings →';
+  Object.assign(fullBtn.style, {
+    width: '100%',
+    marginTop: '10px',
+    padding: '8px 10px',
+    borderRadius: '8px',
+    border: '1px solid #4b5563',
+    background: '#1f2937',
+    color: '#93c5fd',
+    fontSize: '11px',
+    fontWeight: '600',
+    cursor: 'pointer',
+    fontFamily: 'inherit',
+  });
+  fullBtn.addEventListener('click', async (e) => {
+    e.stopPropagation();
+    const res = await sendToBackground({ type: 'OPEN_OPTIONS' });
+    if (!res.ok && chrome.runtime.getURL) {
+      window.open(chrome.runtime.getURL('src/options/index.html'), '_blank', 'noopener,noreferrer');
+    }
+    setOpen(false);
+  });
+  panel.appendChild(fullBtn);
+
+  const fab = document.createElement('button');
+  fab.type = 'button';
+  Object.assign(fab.style, {
+    padding: '8px 14px',
     borderRadius: '9999px',
     border: 'none',
     background: '#111827',
     color: '#fff',
     fontSize: '12px',
-    fontFamily: 'system-ui, sans-serif',
     fontWeight: '600',
     boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
     cursor: 'pointer',
-    opacity: '0.85',
+    opacity: '0.92',
   });
 
-  function render(isHidden) {
-    btn.textContent = isHidden ? '◱ Show schedule preview' : '◰ Hide schedule preview';
+  function setOpen(open) {
+    panel.style.display = open ? 'block' : 'none';
+    fab.textContent = open ? '✕ Close' : '⚙ Settings';
+    fab.setAttribute('aria-expanded', open ? 'true' : 'false');
   }
-  render(hidden);
-  updateButtonLabel = render;
 
-  btn.addEventListener('click', async () => {
-    const cur = (await chrome.storage.local.get([STORAGE_KEY]))[STORAGE_KEY] === true;
-    await chrome.storage.local.set({ [STORAGE_KEY]: !cur });
-    // The storage listener (below) applies the change and updates the label.
+  function applyValues(s) {
+    hideBox.checked = s[HIDE_OVERLAY_KEY] === true;
+    enabledBox.checked = s[ENABLED_KEY] !== false;
+    aiBox.checked = s[AI_SUMMARIES_STORAGE_KEY] !== false;
+  }
+
+  syncMenuFromStorage = () => {
+    chrome.storage.local
+      .get([HIDE_OVERLAY_KEY, ENABLED_KEY, AI_SUMMARIES_STORAGE_KEY])
+      .then(applyValues);
+  };
+
+  applyValues(initial);
+
+  setOpen(false);
+
+  fab.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(panel.style.display === 'none');
+  });
+  closeBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setOpen(false);
+  });
+  panel.addEventListener('click', (e) => e.stopPropagation());
+
+  enabledBox.addEventListener('change', () => {
+    note.hidden = false;
   });
 
-  shadow.appendChild(btn);
+  document.addEventListener('click', (e) => {
+    if (e.composedPath().includes(host)) return;
+    setOpen(false);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setOpen(false);
+  });
+
+  wrap.append(panel, fab);
+  shadow.appendChild(wrap);
   document.body.appendChild(host);
 }
 
 /**
- * Initialize everything: read the saved setting, apply it, mount the button, and
- * keep both the hiding and the button label in sync when the setting changes
- * (from either the popup or the on-page button).
+ * Initialize schedule-preview hiding and the on-page settings menu.
  */
 export async function initOverlayControl() {
-  const hidden = (await chrome.storage.local.get([STORAGE_KEY]))[STORAGE_KEY] === true;
+  const stored = await chrome.storage.local.get([
+    HIDE_OVERLAY_KEY,
+    ENABLED_KEY,
+    AI_SUMMARIES_STORAGE_KEY,
+  ]);
 
-  applyOverlayHiding(hidden);
-  mountToggleButton(hidden);
+  applyOverlayHiding(stored[HIDE_OVERLAY_KEY] === true);
+  mountSettingsMenu(stored);
 
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== 'local' || !changes[STORAGE_KEY]) return;
-    const nowHidden = changes[STORAGE_KEY].newValue === true;
-    applyOverlayHiding(nowHidden);
-    if (updateButtonLabel) updateButtonLabel(nowHidden);
+    if (area !== 'local') return;
+
+    if (changes[HIDE_OVERLAY_KEY]) {
+      applyOverlayHiding(changes[HIDE_OVERLAY_KEY].newValue === true);
+    }
+
+    if (
+      changes[HIDE_OVERLAY_KEY] ||
+      changes[ENABLED_KEY] ||
+      changes[AI_SUMMARIES_STORAGE_KEY]
+    ) {
+      syncMenuFromStorage?.();
+    }
   });
 }
