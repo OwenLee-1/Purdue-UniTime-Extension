@@ -8,7 +8,7 @@ import { normalizeName } from '../core/matching.js';
 import { mergeResults, attachCourseRmp } from '../core/mergeResult.js';
 import { sendToBackground, wakeBackground } from '../shared/extensionMessaging.js';
 
-export const BUILD_TAG = '1.3.2-beta';
+export const BUILD_TAG = '1.3.3-beta';
 
 /** Merged results per professor+course (badge waiters). */
 /** @type {Map<string, object>} */

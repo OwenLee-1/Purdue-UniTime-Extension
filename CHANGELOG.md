@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.3.3-beta] — 2026-06-17
+
+Settings menu freeze parity with the professor sidebar.
+
+### Added
+
+- Background freeze while the on-page settings menu is open (toggles, fab, panel)
+- Gesture swallowing when opening settings or clicking inside the menu
+
+### Fixed
+
+- Settings ✕, Escape, and outside-click close without dismissing UniTime mini popups
+- Swallow guard no longer blocks the settings close button (stuck freeze overlay)
+
 ## [1.3.2-beta] — 2026-06-16
 
 UniTime freeze and sidebar interaction fixes on top of 1.3.1.

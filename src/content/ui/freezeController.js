@@ -9,6 +9,7 @@ const POPUP_SELECTOR =
 
 const CAPTURE_EVENTS = ['mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup'];
 const DISMISS_POINTER_TYPES = new Set(['pointerdown', 'mousedown']);
+const RMP_DISMISS_SEL = '.rmp-panel-close, .rmp-settings-close';
 const SWALLOW_TAIL_MS = 450;
 const SWALLOW_ATTR = 'data-rmp-gesture-swallow-until';
 const FREEZE_ATTR = 'data-rmp-freeze-active';
@@ -122,6 +123,11 @@ export function scheduleProtectedDismiss(fn, e) {
   window.setTimeout(() => fn(), 0);
 }
 
+/** Swallow follow-up events after a click inside RMP UI (settings toggles, etc.). */
+export function touchRmpGesture(e) {
+  startGestureSwallow(e);
+}
+
 /**
  * Close RMP UI after the pointer gesture finishes so GWT never sees follow-up events.
  * @param {Event} e
@@ -157,17 +163,36 @@ function onFreezeCapture(e) {
   const y = 'clientY' in e ? e.clientY : NaN;
   if (!Number.isFinite(x) || !Number.isFinite(y)) return;
 
-  // ✕ close: same capture-block + deferred dismiss as backdrop (not "allow" zone).
+  const hit = elementAtPointer(x, y);
+
+  // ✕ close: always wins over swallow blocking (same path as backdrop dismiss).
+  if (frozen && hit?.closest?.(RMP_DISMISS_SEL)) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    if (DISMISS_POINTER_TYPES.has(e.type)) {
+      scheduleDismissFromGesture(e);
+    }
+    return;
+  }
+
+  // While swallowing, block follow-up events on RMP surfaces (not dismiss controls).
+  if (
+    swallowing &&
+    hit?.closest?.('#rmp-page-settings-host, .rmp-professor-panel') &&
+    !hit?.closest?.(RMP_DISMISS_SEL)
+  ) {
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    return;
+  }
+
   if (frozen) {
-    const hit = elementAtPointer(x, y);
-    if (hit?.closest?.('.rmp-panel-close')) {
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-      if (DISMISS_POINTER_TYPES.has(e.type)) {
-        scheduleDismissFromGesture(e);
-      }
-      return;
+    if (
+      hit?.closest?.('#rmp-page-settings-host, .rmp-settings-panel, .rmp-professor-panel') &&
+      DISMISS_POINTER_TYPES.has(e.type)
+    ) {
+      startGestureSwallow(e);
     }
   }
 

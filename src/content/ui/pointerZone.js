@@ -17,7 +17,8 @@ export const POINTER_ZONE = {
 };
 
 const RMP_SELECTORS = {
-  [POINTER_ZONE.SETTINGS]: '#rmp-page-settings-host',
+  [POINTER_ZONE.SETTINGS]:
+    '#rmp-page-settings-host, .rmp-settings-panel, .rmp-settings-fab, .rmp-settings-close',
   [POINTER_ZONE.SIDEBAR]: '.rmp-professor-panel, .rmp-professor-panel-frame, .rmp-panel-close',
   [POINTER_ZONE.SIDEBAR_BACKDROP]: '.rmp-sidebar-backdrop, #rmp-freeze-catcher',
   [POINTER_ZONE.HOVER_PREVIEW]: '.rmp-hover-preview',

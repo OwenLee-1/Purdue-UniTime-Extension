@@ -8,7 +8,7 @@ import { RmpProvider } from '../core/providers/rmpProvider.js';
 import { ensureRmpRequestHeaders } from './rmpNetRules.js';
 import { lookupRmpViaOffscreen, summarizeReviewsViaOffscreen } from './offscreenFetch.js';
 
-export const BUILD_TAG = '1.3.2-beta';
+export const BUILD_TAG = '1.3.3-beta';
 
 const gradesProvider = new GradesProvider();
 const rmpProvider = new RmpProvider();

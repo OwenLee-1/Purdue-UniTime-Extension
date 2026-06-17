@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Purdue RMP — Inline Professor Ratings",
-  "version": "1.3.2",
+  "version": "1.3.3",
   "description": "Overlays RateMyProfessors ratings inline on Purdue's UniTime scheduling site, so students can compare professors without leaving the page.",
   "permissions": [
     "storage",

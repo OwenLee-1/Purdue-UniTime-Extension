@@ -4,7 +4,7 @@ Alpha Version: A Chrome extension that give professor data alongside each profes
 
 Beta Version: Added more details under dropdown, created calculation for composite rating taking into account more details. Added RMP rating in hover box instead of main box. Beta version marks the temporary termination of the UniTime work, as I will shift to creating a larger database/website for full tracking, creating individualized plans for people based on majors, classes, teachers, etc. 
 
-> Status: **beta 1.3.2** — latest release [`CHANGELOG.md`](./CHANGELOG.md#132-beta--2026-06-16) · tag `v1.3.2-beta`. Prior: [`BETA_1.3.1.md`](./BETA_1.3.1.md). See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
+> Status: **beta 1.3.3** — latest release [`CHANGELOG.md`](./CHANGELOG.md#133-beta--2026-06-17) · tag `v1.3.3-beta`. Prior: [`CHANGELOG.md`](./CHANGELOG.md#132-beta--2026-06-16). See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
 
 ## Overview
 
@@ -17,7 +17,7 @@ it works offline.
 - **Hide UniTime's hover schedule preview** (optional toggle): hides the weekly grid that appears when you hover a class row.
 - **Calendar export**: iCal URL is **auto-detected** while you use UniTime (or paste manually in the popup); one-click **Google / Apple / Outlook** subscribe links.
 
-## Installation — Beta 1.3.2
+## Installation — Beta 1.3.3
 
 ### For testers (download only — no terminal)
 
@@ -34,7 +34,7 @@ npm run build
 
 Load the **`dist/`** folder at `chrome://extensions` (not the repo root).
 
-Full steps and verification: [`BETA_1.3.1.md`](./BETA_1.3.1.md) (course-scoped RMP) plus [`CHANGELOG.md`](./CHANGELOG.md#132-beta--2026-06-16) (1.3.2 freeze fixes). Pushes tagged `v*` on GitHub automatically build and attach a new zip to Releases.
+Full steps and verification: [`CHANGELOG.md`](./CHANGELOG.md#133-beta--2026-06-17). Pushes tagged `v*` on GitHub automatically build and attach a new zip to Releases.
 
 ### Reporting feedback (beta)
 

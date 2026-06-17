@@ -5,7 +5,7 @@
 
 import { AI_SUMMARIES_STORAGE_KEY } from '../core/reviewSummarizer.js';
 import { openExtensionOptionsPage } from '../shared/extensionMessaging.js';
-import { setBackgroundFreeze, applyUiLayerZ } from './ui/freezeController.js';
+import { setBackgroundFreeze, applyUiLayerZ, scheduleProtectedDismiss, touchRmpGesture } from './ui/freezeController.js';
 import { bringRmpLayersToFront } from './ui/unitimeBackdrop.js';
 
 export const OVERLAY_SELECTOR = '.unitime-SuggestionsHint, .unitime-SuggestionsHintWidget';
@@ -98,6 +98,7 @@ function mountSettingsMenu(initial) {
   });
 
   const panel = document.createElement('div');
+  panel.className = 'rmp-settings-panel';
   Object.assign(panel.style, {
     display: 'none',
     width: 'min(280px, calc(100vw - 32px))',
@@ -175,12 +176,13 @@ function mountSettingsMenu(initial) {
   fullBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openExtensionOptionsPage();
-    setOpen(false);
+    scheduleProtectedDismiss(dismissAll, e);
   });
   panel.appendChild(fullBtn);
 
   const fab = document.createElement('button');
   fab.type = 'button';
+  fab.className = 'rmp-settings-fab';
   Object.assign(fab.style, {
     padding: '8px 14px',
     borderRadius: '9999px',
@@ -204,11 +206,7 @@ function mountSettingsMenu(initial) {
   }
 
   function dismissAll() {
-    menuOpen = false;
-    panel.style.display = 'none';
-    fab.textContent = '⚙ Settings';
-    fab.setAttribute('aria-expanded', 'false');
-    syncFreeze();
+    setOpen(false);
   }
 
   function setOpen(open) {
@@ -216,7 +214,11 @@ function mountSettingsMenu(initial) {
     panel.style.display = open ? 'block' : 'none';
     fab.textContent = open ? '✕ Close' : '⚙ Settings';
     fab.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) applyUiLayerZ(wrap);
+    fab.classList.toggle('rmp-settings-close', open);
+    if (open) {
+      applyUiLayerZ(wrap);
+      bringRmpLayersToFront();
+    }
     syncFreeze();
   }
 
@@ -236,18 +238,23 @@ function mountSettingsMenu(initial) {
 
   setOpen(false);
 
-  fab.addEventListener('click', (e) => {
+  fab.addEventListener('pointerdown', (e) => {
+    if (menuOpen) return;
+    touchRmpGesture(e);
+    setOpen(true);
+  }, true);
+
+  const shieldPanelBubble = (e) => {
+    if (!menuOpen) return;
+    touchRmpGesture(e);
     e.stopPropagation();
-    if (menuOpen) dismissAll();
-    else setOpen(true);
-  });
+  };
+  for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click', 'pointerup']) {
+    panel.addEventListener(type, shieldPanelBubble, false);
+  }
 
   enabledBox.addEventListener('change', () => {
     note.hidden = false;
-  });
-
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && menuOpen) dismissAll();
   });
 
   wrap.append(panel, fab);

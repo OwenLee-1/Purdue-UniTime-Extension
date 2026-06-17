@@ -55,6 +55,12 @@
     if (isFrozenOrSwallowing()) {
       var target = nativeEvent.target || nativeEvent.srcElement;
       if (targetInPopup(target)) return false;
+      var x = nativeEvent.clientX;
+      var y = nativeEvent.clientY;
+      if (typeof x === 'number' && typeof y === 'number') {
+        var top = document.elementFromPoint(x, y);
+        if (top && top.closest && top.closest(POPUP_SEL)) return false;
+      }
       return true;
     }
 
