@@ -102,7 +102,7 @@ function hydratePreviewReviewSummaries(reviews, textEls) {
 /**
  * A single RMP review snippet.
  * @param {import('../../core/providers/Provider.js').ReviewSnippet} review
- * @param {{ shorten?: boolean }} [opts]
+ * @param {{ shorten?: boolean, lineClamp?: number }} [opts]
  * @returns {{ el: HTMLDivElement, body: HTMLDivElement }}
  */
 function reviewSnippet(review, opts = {}) {
@@ -135,13 +135,14 @@ function reviewSnippet(review, opts = {}) {
 
   const body = document.createElement('div');
   body.textContent = opts.shorten ? fallbackShortenReview(review.comment) : review.comment;
+  const lineClamp = opts.lineClamp ?? 4;
   Object.assign(body.style, {
     fontSize: '11px',
     lineHeight: '1.4',
     color: '#e5e7eb',
     display: '-webkit-box',
-    webkitLineClamp: '4',
-    WebkitLineClamp: '4',
+    webkitLineClamp: String(lineClamp),
+    WebkitLineClamp: String(lineClamp),
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
   });
@@ -271,9 +272,8 @@ export function createPopover(result, hooks = {}) {
     position: 'fixed',
     zIndex: '2147483647',
     minWidth: '230px',
-    maxWidth: '290px',
-    maxHeight: '70vh',
-    overflowY: 'auto',
+    maxWidth: 'min(290px, calc(100vw - 16px))',
+    overflow: 'visible',
     padding: '10px 12px',
     borderRadius: '10px',
     background: '#111827',
@@ -464,7 +464,10 @@ export function createPopover(result, hooks = {}) {
       card.appendChild(previewHint);
     }
     reviewList.forEach((rev) => {
-      const snippet = reviewSnippet(rev, { shorten: !!hooks.previewOnly });
+      const snippet = reviewSnippet(rev, {
+        shorten: !!hooks.previewOnly,
+        lineClamp: hooks.previewOnly ? 3 : 4,
+      });
       card.appendChild(snippet.el);
       if (hooks.previewOnly) previewReviewBodies.push(snippet.body);
     });
