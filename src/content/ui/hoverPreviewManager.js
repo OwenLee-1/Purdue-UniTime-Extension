@@ -4,21 +4,48 @@ import { createPopover } from './Popover.js';
 /** @type {{ card: HTMLElement | null, host: Element | null, hideTimer: ReturnType<typeof setTimeout> | null }} */
 let state = { card: null, host: null, hideTimer: null };
 
+const VIEWPORT_MARGIN = 8;
+const BADGE_GAP = 6;
+const MIN_PREVIEW_HEIGHT = 120;
+
 /**
+ * Keep the hover card inside the viewport — use all space to the bottom (or top) edge.
  * @param {HTMLElement} card
  * @param {Element} host
  */
 function positionPreview(card, host) {
   const rect = host.getBoundingClientRect();
-  const below = window.innerHeight - rect.bottom;
-  const maxLeft = Math.max(8, Math.min(rect.left, window.innerWidth - card.offsetWidth - 8));
-  card.style.left = `${maxLeft}px`;
-  if (below < 280) {
-    card.style.top = '';
-    card.style.bottom = `${window.innerHeight - rect.top + 6}px`;
+  const viewportH = window.innerHeight;
+  const viewportW = window.innerWidth;
+
+  const cardW = card.offsetWidth;
+  const left = Math.max(
+    VIEWPORT_MARGIN,
+    Math.min(rect.left, viewportW - cardW - VIEWPORT_MARGIN)
+  );
+  card.style.left = `${left}px`;
+
+  const spaceBelow = viewportH - rect.bottom - VIEWPORT_MARGIN;
+  const spaceAbove = rect.top - VIEWPORT_MARGIN;
+  const placeBelow = spaceBelow >= MIN_PREVIEW_HEIGHT || spaceBelow >= spaceAbove;
+
+  card.style.top = '';
+  card.style.bottom = '';
+
+  if (placeBelow) {
+    const maxHeight = Math.max(
+      MIN_PREVIEW_HEIGHT,
+      Math.min(viewportH * 0.7, spaceBelow - BADGE_GAP)
+    );
+    card.style.maxHeight = `${maxHeight}px`;
+    card.style.top = `${rect.bottom + BADGE_GAP}px`;
   } else {
-    card.style.bottom = '';
-    card.style.top = `${rect.bottom + 6}px`;
+    const maxHeight = Math.max(
+      MIN_PREVIEW_HEIGHT,
+      Math.min(viewportH * 0.7, spaceAbove - BADGE_GAP)
+    );
+    card.style.maxHeight = `${maxHeight}px`;
+    card.style.bottom = `${viewportH - rect.top + BADGE_GAP}px`;
   }
 }
 

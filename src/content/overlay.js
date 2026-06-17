@@ -5,7 +5,12 @@
 
 import { AI_SUMMARIES_STORAGE_KEY } from '../core/reviewSummarizer.js';
 import { openExtensionOptionsPage } from '../shared/extensionMessaging.js';
-import { setBackgroundFreeze, applyUiLayerZ, scheduleProtectedDismiss, touchRmpGesture } from './ui/freezeController.js';
+import {
+  setBackgroundFreeze,
+  applyUiLayerZ,
+  scheduleProtectedDismiss,
+  wireProtectedControl,
+} from './ui/freezeController.js';
 import { bringRmpLayersToFront } from './ui/unitimeBackdrop.js';
 
 export const OVERLAY_SELECTOR = '.unitime-SuggestionsHint, .unitime-SuggestionsHintWidget';
@@ -42,6 +47,7 @@ export function applyOverlayHiding(hide) {
  */
 function mountToggleRow(root, label, hint, storageKey, opts = {}) {
   const row = document.createElement('label');
+  row.className = 'rmp-settings-control';
   Object.assign(row.style, {
     display: 'flex',
     alignItems: 'flex-start',
@@ -72,9 +78,13 @@ function mountToggleRow(root, label, hint, storageKey, opts = {}) {
   box.style.marginTop = '2px';
   box.style.flexShrink = '0';
 
-  box.addEventListener('click', (e) => e.stopPropagation());
   box.addEventListener('change', async () => {
     await chrome.storage.local.set({ [storageKey]: box.checked });
+  });
+
+  wireProtectedControl(row, () => {
+    box.checked = !box.checked;
+    box.dispatchEvent(new Event('change', { bubbles: true }));
   });
 
   row.append(text, box);
@@ -95,6 +105,7 @@ function mountSettingsMenu(initial) {
     gap: '8px',
     fontFamily: 'system-ui, sans-serif',
     pointerEvents: 'auto',
+    isolation: 'isolate',
   });
 
   const panel = document.createElement('div');
@@ -159,6 +170,7 @@ function mountSettingsMenu(initial) {
 
   const fullBtn = document.createElement('button');
   fullBtn.type = 'button';
+  fullBtn.className = 'rmp-settings-control';
   fullBtn.textContent = 'Open full settings →';
   Object.assign(fullBtn.style, {
     width: '100%',
@@ -173,10 +185,9 @@ function mountSettingsMenu(initial) {
     cursor: 'pointer',
     fontFamily: 'inherit',
   });
-  fullBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
+  wireProtectedControl(fullBtn, () => {
     openExtensionOptionsPage();
-    scheduleProtectedDismiss(dismissAll, e);
+    dismissAll();
   });
   panel.appendChild(fullBtn);
 
@@ -239,19 +250,8 @@ function mountSettingsMenu(initial) {
   setOpen(false);
 
   fab.addEventListener('pointerdown', (e) => {
-    if (menuOpen) return;
-    touchRmpGesture(e);
-    setOpen(true);
+    if (!menuOpen) scheduleProtectedDismiss(() => setOpen(true), e);
   }, true);
-
-  const shieldPanelBubble = (e) => {
-    if (!menuOpen) return;
-    touchRmpGesture(e);
-    e.stopPropagation();
-  };
-  for (const type of ['pointerdown', 'mousedown', 'mouseup', 'click', 'pointerup']) {
-    panel.addEventListener(type, shieldPanelBubble, false);
-  }
 
   enabledBox.addEventListener('change', () => {
     note.hidden = false;

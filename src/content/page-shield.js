@@ -1,12 +1,13 @@
 // MAIN-world script: stop RMP UI clicks from reaching GWT dismiss handlers.
 (function () {
   var RMP_SEL =
-    '.rmp-professor-panel,#rmp-page-settings-host,.rmp-hover-preview,.rmp-badge-host';
+    '.rmp-professor-panel,#rmp-page-settings-host,.rmp-settings-control,.rmp-hover-preview,.rmp-badge-host';
   var CATCHER_SEL = '#rmp-freeze-catcher,.rmp-sidebar-backdrop';
   var POPUP_SEL =
     '.gwt-PopupPanel, .gwt-DialogBox, .unitime-Dialog, [role="dialog"]';
   var SWALLOW_ATTR = 'data-rmp-gesture-swallow-until';
   var FREEZE_ATTR = 'data-rmp-freeze-active';
+  var FREEZE_POPUPS_ATTR = 'data-rmp-freeze-popups';
   var TYPES = ['mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup'];
 
   function isRmpTarget(e) {
@@ -41,6 +42,10 @@
     return isFreezeActive() || isGestureSwallowing();
   }
 
+  function shouldFreezePopups() {
+    return document.documentElement.hasAttribute(FREEZE_POPUPS_ATTR);
+  }
+
   function targetInPopup(target) {
     return !!(target && target.closest && target.closest(POPUP_SEL));
   }
@@ -54,13 +59,21 @@
 
     if (isFrozenOrSwallowing()) {
       var target = nativeEvent.target || nativeEvent.srcElement;
-      if (targetInPopup(target)) return false;
       var x = nativeEvent.clientX;
       var y = nativeEvent.clientY;
       if (typeof x === 'number' && typeof y === 'number') {
         var top = document.elementFromPoint(x, y);
-        if (top && top.closest && top.closest(POPUP_SEL)) return false;
+        if (top && top.closest) {
+          if (top.closest(RMP_SEL)) return true;
+          if (top.closest(CATCHER_SEL)) return true;
+          if (!shouldFreezePopups() && top.closest(POPUP_SEL)) return false;
+        }
       }
+      if (target && target.closest) {
+        if (target.closest(RMP_SEL)) return true;
+        if (target.closest(CATCHER_SEL)) return true;
+      }
+      if (!shouldFreezePopups() && targetInPopup(target)) return false;
       return true;
     }
 

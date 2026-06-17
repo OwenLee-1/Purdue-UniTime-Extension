@@ -18,7 +18,7 @@ export const POINTER_ZONE = {
 
 const RMP_SELECTORS = {
   [POINTER_ZONE.SETTINGS]:
-    '#rmp-page-settings-host, .rmp-settings-panel, .rmp-settings-fab, .rmp-settings-close',
+    '#rmp-page-settings-host, .rmp-settings-panel, .rmp-settings-fab, .rmp-settings-close, .rmp-settings-control',
   [POINTER_ZONE.SIDEBAR]: '.rmp-professor-panel, .rmp-professor-panel-frame, .rmp-panel-close',
   [POINTER_ZONE.SIDEBAR_BACKDROP]: '.rmp-sidebar-backdrop, #rmp-freeze-catcher',
   [POINTER_ZONE.HOVER_PREVIEW]: '.rmp-hover-preview',
@@ -73,19 +73,29 @@ export function getZoneStackAt(x, y) {
 /** @typedef {'allow'|'block'|'dismiss-sidebar'} PointerAction */
 
 /**
- * Resolve what should happen at a pixel based on the **front-most** layer only.
- * Layers behind the top hit stay frozen — they never receive the event.
+ * Resolve what should happen at a pixel. RMP controls win over the freeze catcher
+ * when both appear in the hit stack at the same coordinates.
  * @param {number} x
  * @param {number} y
  * @param {{ keepUnitimePopups?: boolean }} [opts]
  * @returns {{ action: PointerAction, zone: PointerZone, element: Element | null, stack: Array<{ zone: PointerZone, element: Element }>, x: number, y: number }}
  */
+const RMP_INTERACTIVE_ZONES = new Set([
+  POINTER_ZONE.SETTINGS,
+  POINTER_ZONE.SIDEBAR,
+  POINTER_ZONE.HOVER_PREVIEW,
+  POINTER_ZONE.BADGE,
+]);
+
+const RMP_DISMISS_SEL = '.rmp-panel-close, .rmp-settings-close';
+
 export function resolvePointerAt(x, y, opts = { keepUnitimePopups: true }) {
   const stack = getZoneStackAt(x, y);
   const keepPopups = opts.keepUnitimePopups !== false;
 
+  // ✕ buttons beat the freeze catcher; other RMP controls beat the catcher too.
   for (const { element, zone } of stack) {
-    if (zone === POINTER_ZONE.SIDEBAR_BACKDROP) {
+    if (element instanceof Element && element.closest(RMP_DISMISS_SEL)) {
       const result = {
         action: /** @type {PointerAction} */ ('dismiss-sidebar'),
         zone,
@@ -97,14 +107,24 @@ export function resolvePointerAt(x, y, opts = { keepUnitimePopups: true }) {
       lastSample = { x, y, zone, element, ts: Date.now() };
       return result;
     }
-    if (
-      zone === POINTER_ZONE.SETTINGS ||
-      zone === POINTER_ZONE.SIDEBAR ||
-      zone === POINTER_ZONE.HOVER_PREVIEW ||
-      zone === POINTER_ZONE.BADGE
-    ) {
+    if (RMP_INTERACTIVE_ZONES.has(zone)) {
       const result = {
         action: /** @type {PointerAction} */ ('allow'),
+        zone,
+        element,
+        stack,
+        x,
+        y,
+      };
+      lastSample = { x, y, zone, element, ts: Date.now() };
+      return result;
+    }
+  }
+
+  for (const { element, zone } of stack) {
+    if (zone === POINTER_ZONE.SIDEBAR_BACKDROP) {
+      const result = {
+        action: /** @type {PointerAction} */ ('dismiss-sidebar'),
         zone,
         element,
         stack,

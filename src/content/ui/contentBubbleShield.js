@@ -2,7 +2,7 @@
 // Stops RMP UI clicks from bubbling to UniTime document handlers.
 
 const RMP_SEL =
-  '.rmp-professor-panel,#rmp-page-settings-host,.rmp-hover-preview,.rmp-badge-host';
+  '.rmp-professor-panel,#rmp-page-settings-host,.rmp-settings-control,.rmp-hover-preview,.rmp-badge-host';
 const TYPES = ['mousedown', 'mouseup', 'click', 'pointerdown', 'pointerup'];
 
 /** @param {Event} e */
