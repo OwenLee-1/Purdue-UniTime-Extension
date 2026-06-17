@@ -108,6 +108,7 @@ function readInstructorCellText(cell) {
  * @property {Element} element
  * @property {Element} rowElement
  * @property {string} [courseContext]
+ * @property {boolean} [updateCourseOnly]
  */
 
 /**
@@ -293,15 +294,30 @@ function scanOnce(onFound) {
       const { cell, text } = hit;
 
       const existingHost = cell.querySelector('.rmp-badge-host');
-      if (cell.hasAttribute(PROCESSED_ATTR) && existingHost) continue;
-      if (existingHost) continue;
+      const normalizedCourse = normalizeCourseKey(courseContext) || courseContext;
+
+      if (existingHost) {
+        if (normalizedCourse && existingHost.dataset.rmpCourse !== normalizedCourse) {
+          existingHost.dataset.rmpCourse = normalizedCourse;
+          onFound({
+            text,
+            element: cell,
+            rowElement: row,
+            courseContext: normalizedCourse,
+            updateCourseOnly: true,
+          });
+        }
+        continue;
+      }
+
+      if (cell.hasAttribute(PROCESSED_ATTR)) continue;
 
       cell.setAttribute(PROCESSED_ATTR, 'true');
       onFound({
         text,
         element: cell,
         rowElement: row,
-        courseContext: normalizeCourseKey(courseContext) || courseContext,
+        courseContext: normalizedCourse,
       });
     }
   }

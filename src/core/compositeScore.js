@@ -106,11 +106,22 @@ export function computeComposite(input) {
 }
 
 /**
- * Score used to compare sections (higher = better). Prefer composite when available.
+ * Score used to compare sections (higher = better). Prefer course-scoped RMP when available.
  * @param {import('./providers/Provider.js').ProviderResult} result
  * @returns {number | null}
  */
 export function sectionCompareScore(result) {
+  const courseRmp = result?.courseRmp;
+  if (courseRmp?.hasEnoughForAverage && Number.isFinite(courseRmp.overall)) {
+    const courseComposite = computeComposite({
+      overall: courseRmp.overall,
+      gpa: result?.gpa,
+      recentReviewAvg: courseRmp.reviewSentiment?.avg,
+    });
+    if (courseComposite?.score != null) return courseComposite.score;
+    return courseRmp.overall;
+  }
+
   if (result?.composite?.score != null) return result.composite.score;
   if (typeof result?.overall === 'number') return result.overall;
   if (typeof result?.gpa === 'number') return (result.gpa / 4) * 5;

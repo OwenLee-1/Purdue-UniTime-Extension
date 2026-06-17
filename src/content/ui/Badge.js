@@ -2,6 +2,8 @@
 //
 // Pill: RMP ★ + course GPA at a glance. Hover for preview, click for full panel.
 
+import { displayRmpTitle, pickDisplayRmp } from '../../core/displayRmp.js';
+
 /**
  * @param {number|undefined} score  0–5 scale (RMP)
  */
@@ -75,18 +77,19 @@ export function createBadge(result) {
     return pill;
   }
 
-  const hasRmp = typeof result?.overall === 'number';
+  const displayRmp = pickDisplayRmp(result);
+  const hasRmp = displayRmp.showRating && typeof displayRmp.overall === 'number';
   const hasGpa = typeof result?.gpa === 'number';
 
   if (hasRmp || hasGpa) {
     const parts = [];
-    if (hasRmp) parts.push(`★ ${result.overall.toFixed(1)}`);
+    if (hasRmp) parts.push(`★ ${displayRmp.overall.toFixed(1)}`);
     if (hasGpa) parts.push(`${result.gpa.toFixed(2)} GPA`);
 
-    const bg = hasRmp ? colorFor(result.overall) : gpaColor(result.gpa);
+    const bg = hasRmp ? colorFor(displayRmp.overall) : gpaColor(result.gpa);
     Object.assign(pill.style, { background: bg, color: '#fff' });
     pill.textContent = parts.join(' · ');
-    pill.title = 'Hover for preview · click for full details';
+    pill.title = displayRmpTitle(result);
     applyPersonalIndicators(pill, result.userMark);
     return pill;
   }

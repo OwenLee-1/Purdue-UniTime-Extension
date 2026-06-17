@@ -2,6 +2,7 @@
 // Fixed to the viewport edge so content is never clipped by the tab chrome.
 
 import { fallbackShortenReview, shortenReviewBatch } from '../../core/reviewSummarizer.js';
+import { pickDisplayRmp } from '../../core/displayRmp.js';
 
 const COMMENT_LINE_CLAMP = 2;
 
@@ -39,11 +40,12 @@ function hydrateReviewSummaries(reviews, textEls) {
 /**
  * @param {string} label
  * @param {string} value
+ * @param {Document} doc
  * @param {{ valueColor?: string, emphasize?: boolean }} [opts]
  */
-function tableRow(label, value, opts = {}) {
-  const tr = document.createElement('tr');
-  const th = document.createElement('th');
+function tableRow(label, value, doc, opts = {}) {
+  const tr = doc.createElement('tr');
+  const th = doc.createElement('th');
   th.textContent = label;
   Object.assign(th.style, {
     textAlign: 'left',
@@ -54,7 +56,7 @@ function tableRow(label, value, opts = {}) {
     width: '42%',
     whiteSpace: 'nowrap',
   });
-  const td = document.createElement('td');
+  const td = doc.createElement('td');
   td.textContent = value;
   Object.assign(td.style, {
     textAlign: 'right',
@@ -68,14 +70,14 @@ function tableRow(label, value, opts = {}) {
   return tr;
 }
 
-function sectionBlock(title) {
-  const wrap = document.createElement('section');
+function sectionBlock(title, doc) {
+  const wrap = doc.createElement('section');
   Object.assign(wrap.style, {
     marginTop: '16px',
     paddingTop: '12px',
     borderTop: '1px solid #374151',
   });
-  const heading = document.createElement('h3');
+  const heading = doc.createElement('h3');
   heading.textContent = title;
   Object.assign(heading.style, {
     margin: '0 0 8px',
@@ -91,9 +93,9 @@ function sectionBlock(title) {
 
 const GRADE_COLORS = { A: '#16a34a', B: '#65a30d', C: '#ca8a04', D: '#ea580c', F: '#dc2626' };
 
-function gradeDistribution(dist) {
-  const wrap = document.createElement('div');
-  const bar = document.createElement('div');
+function gradeDistribution(dist, doc) {
+  const wrap = doc.createElement('div');
+  const bar = doc.createElement('div');
   Object.assign(bar.style, {
     display: 'flex',
     height: '10px',
@@ -104,7 +106,7 @@ function gradeDistribution(dist) {
   for (const g of ['A', 'B', 'C', 'D', 'F']) {
     const pct = dist[g] || 0;
     if (pct <= 0) continue;
-    const seg = document.createElement('div');
+    const seg = doc.createElement('div');
     Object.assign(seg.style, { width: `${pct}%`, background: GRADE_COLORS[g] });
     bar.appendChild(seg);
   }
@@ -119,36 +121,23 @@ function gradeDistribution(dist) {
  * @property {(blocked: boolean) => void | Promise<void>} [onBlockToggle]
  * @property {import('../../core/userMarks.js').UserMark | null} [userMark]
  * @property {(mark: import('../../core/userMarks.js').UserMark | null) => void | Promise<void>} [onMarkUpdate]
- * @property {() => void} [onClose]
+ * @property {(e?: Event) => void} [onClose]
  */
 
 /**
  * @param {import('../../core/providers/Provider.js').ProviderResult} result
  * @param {PanelHooks} [hooks]
- * @returns {{ root: HTMLElement, backdrop: HTMLElement }}
+ * @param {Document} [doc]
+ * @returns {{ root: HTMLElement }}
  */
-export function createProfessorPanel(result, hooks = {}) {
+export function createProfessorPanel(result, hooks = {}, doc = document) {
   const detail = result.detail || {};
+  const inFrame = doc !== document;
+  const make = (tag) => doc.createElement(tag);
 
-  const backdrop = document.createElement('div');
-  Object.assign(backdrop.style, {
-    position: 'fixed',
-    inset: '0',
-    background: 'rgba(0,0,0,0.25)',
-    zIndex: '2147483646',
-    pointerEvents: 'auto',
-  });
-  backdrop.addEventListener('click', () => hooks.onClose?.());
-
-  const panel = document.createElement('aside');
+  const panel = make('aside');
   panel.className = 'rmp-professor-panel';
   Object.assign(panel.style, {
-    position: 'fixed',
-    top: '0',
-    right: '0',
-    width: 'min(420px, 92vw)',
-    height: '100vh',
-    maxHeight: '100vh',
     boxSizing: 'border-box',
     display: 'flex',
     flexDirection: 'column',
@@ -157,11 +146,20 @@ export function createProfessorPanel(result, hooks = {}) {
     fontSize: '13px',
     fontFamily: 'system-ui, sans-serif',
     boxShadow: '-8px 0 32px rgba(0,0,0,0.35)',
-    zIndex: '2147483647',
     pointerEvents: 'auto',
+    ...(inFrame
+      ? { width: '100%', height: '100%' }
+      : {
+          position: 'fixed',
+          top: '0',
+          right: '0',
+          width: 'min(420px, 92vw)',
+          height: '100vh',
+          maxHeight: '100vh',
+        }),
   });
 
-  const headerBar = document.createElement('div');
+  const headerBar = make('div');
   Object.assign(headerBar.style, {
     flexShrink: '0',
     display: 'flex',
@@ -173,8 +171,8 @@ export function createProfessorPanel(result, hooks = {}) {
     background: '#0f172a',
   });
 
-  const headerText = document.createElement('div');
-  const nameEl = document.createElement('div');
+  const headerText = doc.createElement('div');
+  const nameEl = doc.createElement('div');
   nameEl.textContent = detail.name || result.displayName || 'Professor';
   Object.assign(nameEl.style, { fontWeight: '700', fontSize: '16px', lineHeight: '1.3' });
   headerText.appendChild(nameEl);
@@ -183,16 +181,17 @@ export function createProfessorPanel(result, hooks = {}) {
   if (result.course) subParts.push(result.course);
   if (detail.department) subParts.push(detail.department);
   if (subParts.length) {
-    const sub = document.createElement('div');
+    const sub = doc.createElement('div');
     sub.textContent = subParts.join(' · ');
     Object.assign(sub.style, { color: '#9ca3af', fontSize: '12px', marginTop: '4px' });
     headerText.appendChild(sub);
   }
 
-  const closeBtn = document.createElement('button');
+  const closeBtn = doc.createElement('button');
   closeBtn.type = 'button';
+  closeBtn.className = 'rmp-panel-close';
   closeBtn.textContent = '✕';
-  closeBtn.title = 'Close';
+  closeBtn.title = 'Close panel';
   Object.assign(closeBtn.style, {
     border: 'none',
     background: '#374151',
@@ -204,15 +203,11 @@ export function createProfessorPanel(result, hooks = {}) {
     fontSize: '14px',
     flexShrink: '0',
   });
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    hooks.onClose?.();
-  });
 
   headerBar.append(headerText, closeBtn);
   panel.appendChild(headerBar);
 
-  const body = document.createElement('div');
+  const body = doc.createElement('div');
   Object.assign(body.style, {
     flex: '1',
     overflowY: 'auto',
@@ -221,10 +216,12 @@ export function createProfessorPanel(result, hooks = {}) {
     WebkitOverflowScrolling: 'touch',
   });
 
-  const hasRating = typeof result.overall === 'number';
+  const displayRmp = pickDisplayRmp(result);
+  const hasRating = displayRmp.showRating && typeof displayRmp.overall === 'number';
   const hasGpa = typeof result.gpa === 'number';
+  const courseRmp = result.courseRmp;
 
-  const scoreRow = document.createElement('div');
+  const scoreRow = doc.createElement('div');
   Object.assign(scoreRow.style, {
     display: 'grid',
     gridTemplateColumns: hasRating && hasGpa ? '1fr 1fr' : '1fr',
@@ -233,41 +230,58 @@ export function createProfessorPanel(result, hooks = {}) {
   });
 
   if (hasRating) {
-    const rmpCard = document.createElement('div');
+    const rmpCard = doc.createElement('div');
     Object.assign(rmpCard.style, {
       background: '#1f2937',
       borderRadius: '10px',
       padding: '12px',
-      borderLeft: `4px solid ${colorFor(result.overall)}`,
+      borderLeft: `4px solid ${colorFor(displayRmp.overall)}`,
     });
-    const rmpLabel = document.createElement('div');
-    rmpLabel.textContent = 'RMP rating';
+    const rmpLabel = doc.createElement('div');
+    rmpLabel.textContent =
+      displayRmp.scope === 'course' && displayRmp.courseLabel
+        ? `RMP for ${displayRmp.courseLabel}`
+        : 'RMP rating';
     Object.assign(rmpLabel.style, { fontSize: '10px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' });
-    const rmpVal = document.createElement('div');
-    rmpVal.textContent = `★ ${result.overall.toFixed(1)}`;
-    Object.assign(rmpVal.style, { fontSize: '22px', fontWeight: '800', color: colorFor(result.overall), marginTop: '4px' });
-    const rmpSub = document.createElement('div');
-    rmpSub.textContent = result.sampleSize ? `${result.sampleSize} ratings` : 'RateMyProfessors';
-    Object.assign(rmpSub.style, { fontSize: '11px', color: '#9ca3af', marginTop: '2px' });
+    const rmpVal = doc.createElement('div');
+    rmpVal.textContent = `★ ${displayRmp.overall.toFixed(1)}`;
+    Object.assign(rmpVal.style, { fontSize: '22px', fontWeight: '800', color: colorFor(displayRmp.overall), marginTop: '4px' });
+    const rmpSub = doc.createElement('div');
+    rmpSub.textContent =
+      displayRmp.scope === 'course'
+        ? `${displayRmp.sampleSize} RMP review${displayRmp.sampleSize === 1 ? '' : 's'} for this course`
+        : displayRmp.sampleSize
+          ? `${displayRmp.sampleSize} ratings (all classes)`
+          : 'RateMyProfessors';
+    Object.assign(rmpSub.style, { fontSize: '11px', color: '#9ca3af', marginTop: '2px', lineHeight: '1.35' });
     rmpCard.append(rmpLabel, rmpVal, rmpSub);
+    if (
+      displayRmp.scope === 'course' &&
+      typeof displayRmp.overallAllClasses === 'number'
+    ) {
+      const allNote = doc.createElement('div');
+      allNote.textContent = `All classes: ★ ${displayRmp.overallAllClasses.toFixed(1)}${displayRmp.sampleSizeAllClasses ? ` (${displayRmp.sampleSizeAllClasses} ratings)` : ''}`;
+      Object.assign(allNote.style, { fontSize: '10px', color: '#6b7280', marginTop: '6px' });
+      rmpCard.appendChild(allNote);
+    }
     scoreRow.appendChild(rmpCard);
   }
 
   if (hasGpa) {
-    const gpaCard = document.createElement('div');
+    const gpaCard = doc.createElement('div');
     Object.assign(gpaCard.style, {
       background: '#1f2937',
       borderRadius: '10px',
       padding: '12px',
       borderLeft: `4px solid ${gpaColor(result.gpa)}`,
     });
-    const gpaLabel = document.createElement('div');
+    const gpaLabel = doc.createElement('div');
     gpaLabel.textContent = 'Course GPA';
     Object.assign(gpaLabel.style, { fontSize: '10px', color: '#9ca3af', textTransform: 'uppercase', letterSpacing: '0.05em' });
-    const gpaVal = document.createElement('div');
+    const gpaVal = doc.createElement('div');
     gpaVal.textContent = result.gpa.toFixed(2);
     Object.assign(gpaVal.style, { fontSize: '22px', fontWeight: '800', color: gpaColor(result.gpa), marginTop: '4px' });
-    const gpaSub = document.createElement('div');
+    const gpaSub = doc.createElement('div');
     gpaSub.textContent = result.gpaSampleSize ? `${result.gpaSampleSize} sections` : 'This course';
     Object.assign(gpaSub.style, { fontSize: '11px', color: '#9ca3af', marginTop: '2px' });
     gpaCard.append(gpaLabel, gpaVal, gpaSub);
@@ -276,8 +290,23 @@ export function createProfessorPanel(result, hooks = {}) {
 
   body.appendChild(scoreRow);
 
+  if (courseRmp?.sampleSize > 0 && !courseRmp?.hasEnoughForAverage && result.course) {
+    const thinNote = doc.createElement('div');
+    thinNote.textContent = `Only ${courseRmp.sampleSize} RMP review${courseRmp.sampleSize === 1 ? '' : 's'} tagged for ${result.course} in the latest fetch — need 3+ for a course average. Showing instructor rating for all classes.`;
+    Object.assign(thinNote.style, {
+      fontSize: '11px',
+      color: '#9ca3af',
+      background: '#1f2937',
+      padding: '8px 10px',
+      borderRadius: '8px',
+      marginBottom: '12px',
+      lineHeight: '1.35',
+    });
+    body.appendChild(thinNote);
+  }
+
   if (!hasRating && result.rmpStatus && result.rmpStatus !== 'staff_tba') {
-    const rmpNote = document.createElement('div');
+    const rmpNote = doc.createElement('div');
     const msg =
       result.rmpStatus === 'ambiguous'
         ? 'Multiple RateMyProfessors matches — use the profile link below if you know the right one.'
@@ -297,18 +326,18 @@ export function createProfessorPanel(result, hooks = {}) {
     body.appendChild(rmpNote);
   }
 
-  const metricsSection = sectionBlock('Details');
-  const table = document.createElement('table');
+  const metricsSection = sectionBlock('Details', doc);
+  const table = doc.createElement('table');
   Object.assign(table.style, {
     width: '100%',
     borderCollapse: 'collapse',
     fontSize: '12px',
   });
-  const tbody = document.createElement('tbody');
+  const tbody = doc.createElement('tbody');
 
   if (result.composite?.score != null) {
     tbody.appendChild(
-      tableRow('Composite score', `${result.composite.score.toFixed(1)} / 5`, {
+      tableRow('Composite score', `${result.composite.score.toFixed(1)} / 5`, doc, {
         valueColor: colorFor(result.composite.score),
       })
     );
@@ -318,18 +347,33 @@ export function createProfessorPanel(result, hooks = {}) {
     const toneColor =
       s.tone === 'mostly positive' ? '#16a34a' : s.tone === 'mostly negative' ? '#dc2626' : '#ca8a04';
     tbody.appendChild(
-      tableRow('Recent sentiment', `${s.tone} (${s.avg.toFixed(1)}/5, n=${s.count})`, { valueColor: toneColor })
+      tableRow('Recent sentiment (all classes)', `${s.tone} (${s.avg.toFixed(1)}/5, n=${s.count})`, doc, {
+        valueColor: toneColor,
+      })
     );
   }
-  if (hasRating && result.difficulty !== undefined) {
-    tbody.appendChild(tableRow('Difficulty', `${result.difficulty.toFixed(1)} / 5`));
+  if (courseRmp?.reviewSentiment) {
+    const s = courseRmp.reviewSentiment;
+    const toneColor =
+      s.tone === 'mostly positive' ? '#16a34a' : s.tone === 'mostly negative' ? '#dc2626' : '#ca8a04';
+    tbody.appendChild(
+      tableRow(
+        `Sentiment (${result.course || courseRmp.courseKey})`,
+        `${s.tone} (${s.avg.toFixed(1)}/5, n=${s.count})`,
+        doc,
+        { valueColor: toneColor }
+      )
+    );
+  }
+  if (hasRating && displayRmp.difficulty !== undefined) {
+    tbody.appendChild(tableRow('Difficulty', `${displayRmp.difficulty.toFixed(1)} / 5`, doc));
   }
   if (detail.wouldTakeAgainPct !== undefined) {
-    tbody.appendChild(tableRow('Would take again', `${detail.wouldTakeAgainPct}%`));
+    tbody.appendChild(tableRow('Would take again', `${detail.wouldTakeAgainPct}%`, doc));
   }
   if (result.gpaDistribution) {
-    const tr = document.createElement('tr');
-    const th = document.createElement('th');
+    const tr = doc.createElement('tr');
+    const th = doc.createElement('th');
     th.textContent = 'Grade distribution';
     Object.assign(th.style, {
       textAlign: 'left',
@@ -338,8 +382,8 @@ export function createProfessorPanel(result, hooks = {}) {
       verticalAlign: 'top',
       fontWeight: '500',
     });
-    const td = document.createElement('td');
-    td.appendChild(gradeDistribution(result.gpaDistribution));
+    const td = doc.createElement('td');
+    td.appendChild(gradeDistribution(result.gpaDistribution, doc));
     Object.assign(td.style, { padding: '6px 0', textAlign: 'right' });
     tr.append(th, td);
     tbody.appendChild(tr);
@@ -352,11 +396,11 @@ export function createProfessorPanel(result, hooks = {}) {
   }
 
   if (detail.tags?.length) {
-    const tagSection = sectionBlock('Top tags');
-    const tagWrap = document.createElement('div');
+    const tagSection = sectionBlock('Top tags', doc);
+    const tagWrap = doc.createElement('div');
     Object.assign(tagWrap.style, { display: 'flex', flexWrap: 'wrap', gap: '6px' });
     detail.tags.forEach((t) => {
-      const chip = document.createElement('span');
+      const chip = doc.createElement('span');
       chip.textContent = t;
       Object.assign(chip.style, {
         background: '#374151',
@@ -370,25 +414,34 @@ export function createProfessorPanel(result, hooks = {}) {
     body.appendChild(tagSection);
   }
 
-  if (detail.reviews?.length) {
-    const reviewSection = sectionBlock('Recent comments');
-    const reviewHint = document.createElement('p');
-    reviewHint.textContent = 'AI-shortened previews — open RateMyProfessors for full discussion.';
+  if (detail.reviews?.length || courseRmp?.reviews?.length) {
+    const courseReviewList = courseRmp?.reviews?.length ? courseRmp.reviews : [];
+    const displayReviews = courseReviewList.length ? courseReviewList : detail.reviews || [];
+    const reviewSection = sectionBlock(
+      courseReviewList.length ? `Comments for ${result.course || courseRmp?.courseKey}` : 'Recent comments',
+      doc
+    );
+    const reviewHint = doc.createElement('p');
+    reviewHint.textContent = courseReviewList.length
+      ? 'Matched from RMP reviews tagged for this course — AI-shortened previews.'
+      : result.course
+        ? 'No RMP reviews tagged for this course in the latest fetch — showing all recent reviews.'
+        : 'AI-shortened previews — open RateMyProfessors for full discussion.';
     Object.assign(reviewHint.style, { margin: '0 0 8px', fontSize: '11px', color: '#6b7280' });
     reviewSection.appendChild(reviewHint);
 
     /** @type {HTMLParagraphElement[]} */
     const reviewTextEls = [];
 
-    for (const review of detail.reviews) {
-      const card = document.createElement('article');
+    for (const review of displayReviews) {
+      const card = doc.createElement('article');
       Object.assign(card.style, {
         background: '#1f2937',
         borderRadius: '8px',
         padding: '10px',
         marginBottom: '8px',
       });
-      const meta = document.createElement('div');
+      const meta = doc.createElement('div');
       Object.assign(meta.style, {
         display: 'flex',
         justifyContent: 'space-between',
@@ -398,14 +451,14 @@ export function createProfessorPanel(result, hooks = {}) {
       });
       meta.textContent = review.class || 'Review';
       if (typeof review.quality === 'number') {
-        const stars = document.createElement('span');
+        const stars = doc.createElement('span');
         stars.textContent = `★ ${review.quality}`;
         stars.style.color = colorFor(review.quality);
         stars.style.fontWeight = '700';
         meta.textContent = '';
-        meta.append(document.createTextNode(review.class || 'Review'), stars);
+        meta.append(doc.createTextNode(review.class || 'Review'), stars);
       }
-      const text = document.createElement('p');
+      const text = doc.createElement('p');
       text.textContent = truncateComment(review.comment);
       Object.assign(text.style, {
         margin: '0',
@@ -423,10 +476,10 @@ export function createProfessorPanel(result, hooks = {}) {
       reviewTextEls.push(text);
     }
 
-    hydrateReviewSummaries(detail.reviews, reviewTextEls);
+    hydrateReviewSummaries(displayReviews, reviewTextEls);
 
     if (detail.profileUrl) {
-      const jumpBtn = document.createElement('a');
+      const jumpBtn = doc.createElement('a');
       jumpBtn.href = detail.profileUrl;
       jumpBtn.target = '_blank';
       jumpBtn.rel = 'noopener noreferrer';
@@ -447,8 +500,8 @@ export function createProfessorPanel(result, hooks = {}) {
     }
     body.appendChild(reviewSection);
   } else if (result.sampleSize > 0 && detail.profileUrl) {
-    const reviewSection = sectionBlock('Reviews');
-    const jumpBtn = document.createElement('a');
+    const reviewSection = sectionBlock('Reviews', doc);
+    const jumpBtn = doc.createElement('a');
     jumpBtn.href = detail.profileUrl;
     jumpBtn.target = '_blank';
     jumpBtn.rel = 'noopener noreferrer';
@@ -459,14 +512,14 @@ export function createProfessorPanel(result, hooks = {}) {
   }
 
   if (hooks.rawName && hooks.onMarkUpdate) {
-    const marksSection = sectionBlock('Your take');
-    const btnRow = document.createElement('div');
+    const marksSection = sectionBlock('Your take', doc);
+    const btnRow = doc.createElement('div');
     Object.assign(btnRow.style, { display: 'flex', gap: '8px', marginBottom: '8px' });
     for (const [label, value] of [
       ['👍 Like', 'like'],
       ['👎 Dislike', 'dislike'],
     ]) {
-      const btn = document.createElement('button');
+      const btn = doc.createElement('button');
       btn.type = 'button';
       btn.textContent = label;
       const active = hooks.userMark?.sentiment === value;
@@ -490,16 +543,16 @@ export function createProfessorPanel(result, hooks = {}) {
     }
     marksSection.appendChild(btnRow);
 
-    const takenLabel = document.createElement('label');
+    const takenLabel = doc.createElement('label');
     Object.assign(takenLabel.style, { display: 'flex', gap: '8px', alignItems: 'center', fontSize: '12px', marginBottom: '8px' });
-    const takenBox = document.createElement('input');
+    const takenBox = doc.createElement('input');
     takenBox.type = 'checkbox';
     takenBox.checked = !!hooks.userMark?.taken;
-    takenLabel.append(takenBox, document.createTextNode("I've had this professor"));
+    takenLabel.append(takenBox, doc.createTextNode("I've had this professor"));
     takenBox.addEventListener('change', () => hooks.onMarkUpdate?.({ taken: takenBox.checked }));
     marksSection.appendChild(takenLabel);
 
-    const noteInput = document.createElement('textarea');
+    const noteInput = doc.createElement('textarea');
     noteInput.placeholder = 'Optional note';
     noteInput.value = hooks.userMark?.note || '';
     Object.assign(noteInput.style, {
@@ -521,8 +574,8 @@ export function createProfessorPanel(result, hooks = {}) {
   }
 
   if (hooks.rawName && hooks.onBlockToggle) {
-    const actions = sectionBlock('Actions');
-    const blockBtn = document.createElement('button');
+    const actions = sectionBlock('Actions', doc);
+    const blockBtn = doc.createElement('button');
     blockBtn.type = 'button';
     blockBtn.textContent = hooks.isBlocked ? 'Unhide this professor' : 'Hide this professor';
     Object.assign(blockBtn.style, {
@@ -545,9 +598,9 @@ export function createProfessorPanel(result, hooks = {}) {
   }
 
   if (detail.profileUrl) {
-    const footer = document.createElement('div');
+    const footer = doc.createElement('div');
     Object.assign(footer.style, { marginTop: '16px', paddingTop: '12px', borderTop: '1px solid #374151' });
-    const link = document.createElement('a');
+    const link = doc.createElement('a');
     link.href = detail.profileUrl;
     link.target = '_blank';
     link.rel = 'noopener noreferrer';
@@ -559,7 +612,5 @@ export function createProfessorPanel(result, hooks = {}) {
 
   panel.appendChild(body);
 
-  panel.addEventListener('click', (e) => e.stopPropagation());
-
-  return { root: panel, backdrop };
+  return { root: panel };
 }

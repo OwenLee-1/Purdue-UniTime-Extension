@@ -29,6 +29,24 @@ export function sendToBackground(message) {
 }
 
 /**
+ * Open the extension options page from a content script or other non-popup context.
+ * Content scripts cannot call chrome.runtime.openOptionsPage().
+ * @returns {boolean} Whether a tab/window was opened
+ */
+export function openExtensionOptionsPage() {
+  try {
+    if (!chrome?.runtime?.getURL) return false;
+    const url = chrome.runtime.getURL('src/options/index.html');
+    if (!url) return false;
+    window.open(url, '_blank', 'noopener,noreferrer');
+    return true;
+  } catch (err) {
+    console.warn('[Purdue RMP] could not open settings:', err);
+    return false;
+  }
+}
+
+/**
  * @returns {Promise<boolean>}
  */
 export async function wakeBackground() {

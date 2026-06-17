@@ -4,12 +4,12 @@ Alpha Version: A Chrome extension that give professor data alongside each profes
 
 Beta Version: Added more details under dropdown, created calculation for composite rating taking into account more details. Added RMP rating in hover box instead of main box. Beta version marks the temporary termination of the UniTime work, as I will shift to creating a larger database/website for full tracking, creating individualized plans for people based on majors, classes, teachers, etc. 
 
-> Status: **beta 1.3.0** — latest release [`BETA_1.3.0.md`](./BETA_1.3.0.md) · tag `v1.3.0-beta`. Prior: [`BETA_1.2.0.md`](./BETA_1.2.0.md), [`BETA_1.1.0.md`](./BETA_1.1.0.md). See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
+> Status: **beta 1.3.2** — latest release [`CHANGELOG.md`](./CHANGELOG.md#132-beta--2026-06-16) · tag `v1.3.2-beta`. Prior: [`BETA_1.3.1.md`](./BETA_1.3.1.md). See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
 
 ## Overview
 
 - **Inline rating** next to each instructor: `★ 4.3 · 3.15 GPA` (RMP overall + per-course GPA at a glance).
-- **Hover** a badge for a quick preview; **click** for the full right-hand panel (RMP, GPA, difficulty, tags, AI-shortened reviews, personal marks, hide professor).
+- **Hover** a badge for a quick preview; **click** for the full right-hand panel (RMP, GPA, difficulty, tags, AI-shortened reviews, **course-filtered RMP when available**, personal marks, hide professor).
 - **Best-section highlight**: when a course has multiple sections, the highest-rated professor is flagged so you can pick at a glance.
 - **Average GPA** comes from the open [BoilerGrades](https://www.boilergrades.com/)
 dataset (Purdue public-records grade distributions), bundled with the extension so
@@ -17,7 +17,7 @@ it works offline.
 - **Hide UniTime's hover schedule preview** (optional toggle): hides the weekly grid that appears when you hover a class row.
 - **Calendar export**: iCal URL is **auto-detected** while you use UniTime (or paste manually in the popup); one-click **Google / Apple / Outlook** subscribe links.
 
-## Installation — Beta 1.3.0
+## Installation — Beta 1.3.2
 
 ### For testers (download only — no terminal)
 
@@ -34,7 +34,7 @@ npm run build
 
 Load the **`dist/`** folder at `chrome://extensions` (not the repo root).
 
-Full steps and verification: [`BETA_1.3.0.md`](./BETA_1.3.0.md). Pushes tagged `v*` on GitHub automatically build and attach a new zip to Releases.
+Full steps and verification: [`BETA_1.3.1.md`](./BETA_1.3.1.md) (course-scoped RMP) plus [`CHANGELOG.md`](./CHANGELOG.md#132-beta--2026-06-16) (1.3.2 freeze fixes). Pushes tagged `v*` on GitHub automatically build and attach a new zip to Releases.
 
 ### Reporting feedback (beta)
 

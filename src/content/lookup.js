@@ -2,12 +2,13 @@
 // (page-context fetch is blocked on UniTime). GPA stays in the worker too.
 
 import { lookupKey } from '../core/lookupKey.js';
+import { normalizeCourseKey } from '../core/courseKey.js';
 import { professorKey } from '../core/blocks.js';
 import { normalizeName } from '../core/matching.js';
-import { mergeResults } from '../core/mergeResult.js';
+import { mergeResults, attachCourseRmp } from '../core/mergeResult.js';
 import { sendToBackground, wakeBackground } from '../shared/extensionMessaging.js';
 
-export const BUILD_TAG = '1.3.0-beta';
+export const BUILD_TAG = '1.3.2-beta';
 
 /** Merged results per professor+course (badge waiters). */
 /** @type {Map<string, object>} */
@@ -82,6 +83,19 @@ function shouldCacheRmpResult(result) {
   return result?.status === 'ok' && typeof result.overall === 'number';
 }
 
+function rmpResultHasReviewBatch(result) {
+  if (!result?.detail) return false;
+  return !!(result.detail.recentRatings?.length || result.detail.reviews?.length);
+}
+
+function invalidateMergedCacheForProfessor(pk) {
+  if (!pk) return;
+  const prefix = `${pk}::`;
+  for (const key of resultCache.keys()) {
+    if (key.startsWith(prefix)) resultCache.delete(key);
+  }
+}
+
 function cloneResult(result) {
   return result && typeof result === 'object' ? { ...result } : result;
 }
@@ -113,7 +127,10 @@ function getRmpProfessorCache(rawName) {
   const pk = professorKey(rawName);
   if (pk) {
     const hit = rmpCacheByProfessor.get(pk);
-    if (shouldCacheRmpResult(hit)) return hit;
+    if (shouldCacheRmpResult(hit)) {
+      if ((hit.sampleSize || 0) > 0 && !rmpResultHasReviewBatch(hit)) return undefined;
+      return hit;
+    }
   }
 
   const n = normalizeName(rawName);
@@ -121,6 +138,7 @@ function getRmpProfessorCache(rawName) {
 
   for (const [key, res] of rmpCacheByProfessor) {
     if (!shouldCacheRmpResult(res) || key.startsWith('legacy:')) continue;
+    if ((res.sampleSize || 0) > 0 && !rmpResultHasReviewBatch(res)) continue;
     const parts = key.split(':');
     if (parts.length < 3 || parts[1] !== n.last) continue;
     const cachedFirst = parts[2] || '';
@@ -129,12 +147,20 @@ function getRmpProfessorCache(rawName) {
   return undefined;
 }
 
+function normalizeLookupQuery(query) {
+  const course = normalizeCourseKey(query.course) || '';
+  return { ...query, course };
+}
+
 function deliverToWaiters(key, result) {
   const out = cloneResult(result);
-  if (shouldCacheMergedResult(out)) resultCache.set(key, out);
   const list = waitersByKey.get(key) || [];
   waitersByKey.delete(key);
   for (const fn of list) fn(out);
+
+  const toCache = cloneResult(result);
+  delete toCache.courseRmp;
+  if (shouldCacheMergedResult(toCache)) resultCache.set(key, toCache);
 }
 
 /**
@@ -169,7 +195,8 @@ async function fetchGradesBatch(queries) {
  * @param {(result: object) => void} onResult
  */
 export function queueLookup(query, onResult) {
-  const key = lookupKey(query);
+  const normalizedQuery = normalizeLookupQuery(query);
+  const key = lookupKey(normalizedQuery);
   if (!key) {
     onResult({ status: 'no_match' });
     return;
@@ -177,14 +204,14 @@ export function queueLookup(query, onResult) {
 
   const cached = resultCache.get(key);
   if (cached) {
-    onResult(cloneResult(cached));
+    onResult(cloneResult(attachCourseRmp(cached, normalizedQuery.course)));
     return;
   }
 
   const list = waitersByKey.get(key) || [];
   list.push(onResult);
   waitersByKey.set(key, list);
-  pendingQueries.set(key, query);
+  pendingQueries.set(key, normalizedQuery);
 
   if (batchTimer) clearTimeout(batchTimer);
   batchTimer = setTimeout(flushBatch, BATCH_DEBOUNCE_MS);
@@ -249,6 +276,7 @@ async function flushBatch() {
   }
 
   for (const { pk, rmpRes } of newlyCachedProfessors) {
+    invalidateMergedCacheForProfessor(pk);
     notifyProfessorRmpReady(pk, rmpRes);
   }
 }

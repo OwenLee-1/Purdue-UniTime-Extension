@@ -1,5 +1,8 @@
 // Content script entry — detects instructors, batches lookups, applies badges.
 
+import './ui/freezeController.js';
+import './ui/contentBubbleShield.js';
+import { setPointerZoneDebug } from './ui/pointerZone.js';
 import { normalizeCourseKey } from '../core/courseKey.js';
 import { startDetector, applyBlockVisibility } from './detector.js';
 import { injectBadge } from './injector.js';
@@ -13,7 +16,6 @@ import {
   BUILD_TAG,
   maybeClearLookupCacheFromStorage,
   onProfessorRmpReady,
-  hasWarmMergedCache,
 } from './lookup.js';
 import { startIcalScraper } from './icalScraper.js';
 
@@ -69,26 +71,27 @@ function refreshBadgesForProfessor(pk) {
     if (!handle.rawName || professorKey(handle.rawName) !== pk) continue;
     if (!handle.element?.isConnected || !handle.candidate || !handle.entry) continue;
 
-    const query = {
-      rawName: handle.rawName,
-      school: 'purdue',
-      course: handle.courseContext || '',
-    };
-    if (hasWarmMergedCache(query)) continue;
-
-    queueLookup(query, (result) =>
-      applyResultToBadge(handle, handle.candidate, handle.entry, result)
+    queueLookup(
+      {
+        rawName: handle.rawName,
+        school: 'purdue',
+        course: handle.courseContext || '',
+      },
+      (result) => applyResultToBadge(handle, handle.candidate, handle.entry, result)
     );
   }
 }
 
 async function boot() {
-  initOverlayControl();
+  await initOverlayControl();
   startIcalScraper();
 
   onProfessorRmpReady((pk) => refreshBadgesForProfessor(pk));
 
   const settings = await chrome.storage.local.get(['enabled', 'debug']);
+  if (settings.debug === true) {
+    setPointerZoneDebug(true);
+  }
   if (settings.enabled === false) {
     console.log('[Purdue RMP] disabled via popup toggle');
     return;
@@ -120,6 +123,29 @@ async function boot() {
   startDetector(async (candidate) => {
     const courseContext = normalizeCourseKey(candidate.courseContext) || '';
 
+    if (candidate.updateCourseOnly) {
+      for (const handle of badgeHandles) {
+        if (handle.element !== candidate.element || !handle.rawName) continue;
+        if ((handle.courseContext || '') === courseContext) return;
+
+        handle.courseContext = courseContext;
+        if (handle.candidate) handle.candidate.courseContext = courseContext;
+        if (handle.element?.querySelector('.rmp-badge-host')) {
+          handle.element.querySelector('.rmp-badge-host').dataset.rmpCourse = courseContext;
+        }
+
+        const query = {
+          rawName: handle.rawName,
+          school: 'purdue',
+          course: courseContext,
+        };
+        queueLookup(query, (result) =>
+          applyResultToBadge(handle, handle.candidate, handle.entry, result)
+        );
+      }
+      return;
+    }
+
     if (debug) {
       console.log('[Purdue RMP] instructor:', candidate.text, courseContext || '(no course)');
     }
@@ -138,6 +164,7 @@ async function boot() {
 
     const badge = injectBadge(candidate.element, {
       rawName: candidate.text,
+      courseContext,
       async onBlockToggle(blocked) {
         entry.blocked = blocked;
         if (blocked) {
@@ -194,10 +221,31 @@ async function boot() {
 
 let bootStarted = false;
 
+/** Wait until document.body exists (content script may run at document_start). */
+function waitForBody() {
+  if (document.body) return Promise.resolve();
+  return new Promise((resolve) => {
+    /** @type {MutationObserver | null} */
+    let observer = null;
+
+    const finish = () => {
+      if (!document.body) return;
+      observer?.disconnect();
+      resolve();
+    };
+
+    document.addEventListener('DOMContentLoaded', finish, { once: true });
+    observer = new MutationObserver(finish);
+    observer.observe(document.documentElement, { childList: true });
+    finish();
+  });
+}
+
 async function startOnce() {
   if (bootStarted) return;
   bootStarted = true;
   try {
+    await waitForBody();
     await boot();
   } catch (err) {
     console.error('[Purdue RMP] boot failed:', err);

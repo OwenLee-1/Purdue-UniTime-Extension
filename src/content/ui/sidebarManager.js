@@ -1,9 +1,13 @@
 // Singleton right-hand professor panel — one open at a time across all badges.
+// Mounted on document.body (same pattern as settings menu — iframes are blocked by
+// UniTime's frame-src CSP and never receive panel content).
 
 import { createProfessorPanel } from './ProfessorPanel.js';
 import { hideHoverPreview } from './hoverPreviewManager.js';
+import { bringRmpLayersToFront } from './unitimeBackdrop.js';
+import { applyUiLayerZ, setBackgroundFreeze } from './freezeController.js';
 
-/** @type {{ root: HTMLElement, backdrop: HTMLElement, host: Element | null } | null} */
+/** @type {{ root: HTMLElement, host: Element | null } | null} */
 let openPanel = null;
 
 /**
@@ -21,22 +25,24 @@ export function openProfessorSidebar(result, hooks, host) {
 
   closeProfessorSidebar();
 
-  const mergedHooks = {
-    ...hooks,
-    onClose: () => {
+  const { root: panel } = createProfessorPanel(result, hooks, document);
+  document.body.appendChild(panel);
+  applyUiLayerZ(panel);
+
+  bringRmpLayersToFront();
+  openPanel = { root: panel, host };
+  setBackgroundFreeze(true, {
+    reason: 'sidebar',
+    onOutsideClick: () => {
       closeProfessorSidebar();
       hooks.onClose?.();
     },
-  };
-
-  const { root, backdrop } = createProfessorPanel(result, mergedHooks);
-  document.body.append(backdrop, root);
-  openPanel = { root, backdrop, host };
+  });
 }
 
 export function closeProfessorSidebar() {
   if (!openPanel) return;
-  openPanel.backdrop.remove();
+  setBackgroundFreeze(false, { reason: 'sidebar' });
   openPanel.root.remove();
   openPanel = null;
 }
@@ -48,9 +54,8 @@ export function closeProfessorSidebar() {
  */
 export function refreshProfessorSidebar(result, hooks, host) {
   if (!openPanel || openPanel.host !== host) return;
-  const wasOpen = true;
   closeProfessorSidebar();
-  if (wasOpen) openProfessorSidebar(result, hooks, host);
+  openProfessorSidebar(result, hooks, host);
 }
 
 export function isSidebarOpenFor(host) {

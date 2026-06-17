@@ -8,7 +8,7 @@ import { RmpProvider } from '../core/providers/rmpProvider.js';
 import { ensureRmpRequestHeaders } from './rmpNetRules.js';
 import { lookupRmpViaOffscreen, summarizeReviewsViaOffscreen } from './offscreenFetch.js';
 
-export const BUILD_TAG = '1.3.0-beta';
+export const BUILD_TAG = '1.3.2-beta';
 
 const gradesProvider = new GradesProvider();
 const rmpProvider = new RmpProvider();
@@ -193,10 +193,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
 
   if (message?.type === 'OPEN_OPTIONS') {
-    chrome.runtime
-      .openOptionsPage()
-      .then(() => sendResponse({ ok: true }))
-      .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    if (typeof chrome.runtime.openOptionsPage === 'function') {
+      chrome.runtime
+        .openOptionsPage()
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) => sendResponse({ ok: false, error: String(err) }));
+    } else {
+      sendResponse({ ok: false, error: 'openOptionsPage unavailable in background' });
+    }
     return true;
   }
 

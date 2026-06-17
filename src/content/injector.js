@@ -34,6 +34,7 @@ const HOVER_SHOW_DELAY_MS = 280;
 /**
  * @typedef {Object} InjectContext
  * @property {string} rawName
+ * @property {string} [courseContext]
  * @property {(blocked: boolean) => void | Promise<void>} [onBlockToggle]
  */
 
@@ -48,6 +49,7 @@ export function injectBadge(target, ctx = {}) {
   const host = document.createElement('span');
   host.className = 'rmp-badge-host';
   host.dataset.rmpInstructor = ctx.rawName || '';
+  if (ctx.courseContext) host.dataset.rmpCourse = ctx.courseContext;
   host.style.marginLeft = '6px';
   host.style.display = 'inline-block';
   host.style.verticalAlign = 'middle';
@@ -122,8 +124,8 @@ export function injectBadge(target, ctx = {}) {
   }
 
   async function toggleSidebar() {
-    if (latest.status === 'loading' || latest.status === 'staff_tba') return;
     hideHoverPreview();
+    if (latest.status === 'staff_tba') return;
     const hooks = await panelHooks();
     openProfessorSidebar(latest, hooks, host);
   }

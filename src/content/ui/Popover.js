@@ -3,6 +3,8 @@
 // `previewOnly` mode: read-only glance on badge hover; click opens the side panel.
 
 import { fallbackShortenReview, shortenReviewBatch } from '../../core/reviewSummarizer.js';
+import { computeComposite } from '../../core/compositeScore.js';
+import { pickDisplayRmp } from '../../core/displayRmp.js';
 
 function colorFor(overall) {
   if (overall === undefined) return '#9ca3af';
@@ -264,6 +266,7 @@ export function createPopover(result, hooks = {}) {
   const detail = result.detail || {};
 
   const card = document.createElement('div');
+  card.className = 'rmp-hover-preview';
   Object.assign(card.style, {
     position: 'fixed',
     zIndex: '2147483647',
@@ -300,12 +303,20 @@ export function createPopover(result, hooks = {}) {
   }
   card.appendChild(header);
 
-  const hasRating = typeof result.overall === 'number';
-  const composite = result.composite;
+  const displayRmp = pickDisplayRmp(result);
+  const hasRating = displayRmp.showRating && typeof displayRmp.overall === 'number';
+  const composite =
+    displayRmp.scope === 'course' && hasRating
+      ? computeComposite({
+          overall: displayRmp.overall,
+          gpa: result.gpa,
+          recentReviewAvg: result.courseRmp?.reviewSentiment?.avg,
+        })
+      : result.composite;
 
   // Headline: composite estimate when we have enough signals, else RMP or GPA alone.
   const headline = document.createElement('div');
-  const headlineScore = composite?.score ?? (hasRating ? result.overall : null);
+  const headlineScore = composite?.score ?? (hasRating ? displayRmp.overall : null);
   Object.assign(headline.style, {
     fontSize: '18px',
     fontWeight: '800',
@@ -314,9 +325,15 @@ export function createPopover(result, hooks = {}) {
   });
   if (composite?.score != null) {
     headline.textContent = `◎ ${composite.score.toFixed(1)} / 5 composite`;
-    headline.title = 'Blends RMP rating, would-take-again, course GPA, and recent review stars';
+    headline.title =
+      displayRmp.scope === 'course'
+        ? 'Blends course RMP rating, course GPA, and course review stars'
+        : 'Blends RMP rating, would-take-again, course GPA, and recent review stars';
   } else if (hasRating) {
-    headline.textContent = `★ ${result.overall.toFixed(1)} / 5`;
+    headline.textContent =
+      displayRmp.scope === 'course' && displayRmp.courseLabel
+        ? `★ ${displayRmp.overall.toFixed(1)} / 5 for ${displayRmp.courseLabel}`
+        : `★ ${displayRmp.overall.toFixed(1)} / 5`;
   } else if (typeof result.gpa === 'number') {
     headline.textContent = `${result.gpa.toFixed(2)} avg GPA`;
   } else {
@@ -326,15 +343,33 @@ export function createPopover(result, hooks = {}) {
 
   if (hasRating) {
     const rmpLine = document.createElement('div');
-    const n = result.sampleSize ? ` · ${result.sampleSize} ratings` : '';
-    rmpLine.textContent = `★ ${result.overall.toFixed(1)} / 5 instructor RMP${n}`;
+    const n = displayRmp.sampleSize ? ` · ${displayRmp.sampleSize} review${displayRmp.sampleSize === 1 ? '' : 's'}` : '';
+    rmpLine.textContent =
+      displayRmp.scope === 'course' && displayRmp.courseLabel
+        ? `★ ${displayRmp.overall.toFixed(1)} / 5 RMP for ${displayRmp.courseLabel}${n}`
+        : `★ ${displayRmp.overall.toFixed(1)} / 5 instructor RMP${n}`;
     Object.assign(rmpLine.style, {
       fontSize: '13px',
       fontWeight: '700',
-      color: colorFor(result.overall),
+      color: colorFor(displayRmp.overall),
       margin: '0 0 8px',
     });
     card.appendChild(rmpLine);
+
+    if (
+      displayRmp.scope === 'course' &&
+      typeof displayRmp.overallAllClasses === 'number'
+    ) {
+      const allLine = document.createElement('div');
+      const allN = displayRmp.sampleSizeAllClasses ? ` · ${displayRmp.sampleSizeAllClasses} ratings` : '';
+      allLine.textContent = `All classes: ★ ${displayRmp.overallAllClasses.toFixed(1)} / 5${allN}`;
+      Object.assign(allLine.style, {
+        fontSize: '11px',
+        color: '#9ca3af',
+        margin: '0 0 8px',
+      });
+      card.appendChild(allLine);
+    }
   } else if (result.rmpStatus && result.rmpStatus !== 'staff_tba') {
     const rmpNote = document.createElement('div');
     const msg =
@@ -353,7 +388,7 @@ export function createPopover(result, hooks = {}) {
     card.appendChild(rmpNote);
   }
 
-  const sentiment = result.reviewSentiment;
+  const sentiment = result.courseRmp?.reviewSentiment || result.reviewSentiment;
   if (sentiment) {
     const toneColor =
       sentiment.tone === 'mostly positive'
@@ -361,7 +396,7 @@ export function createPopover(result, hooks = {}) {
         : sentiment.tone === 'mostly negative'
           ? '#dc2626'
           : '#ca8a04';
-    card.appendChild(sectionLabel('Recent review sentiment'));
+    card.appendChild(sectionLabel(result.courseRmp?.reviewSentiment ? 'Course review sentiment' : 'Recent review sentiment'));
     const line = document.createElement('div');
     line.textContent = `${sentiment.tone} · avg ${sentiment.avg.toFixed(1)}/5 (${sentiment.positivePct}% ≥4★, n=${sentiment.count})`;
     Object.assign(line.style, { color: toneColor, fontWeight: '600', fontSize: '11px', marginBottom: '4px' });
@@ -372,13 +407,20 @@ export function createPopover(result, hooks = {}) {
     const n = result.gpaSampleSize ? ` (${result.gpaSampleSize} sections)` : '';
     card.appendChild(row('Avg GPA (this course)', `${result.gpa.toFixed(2)}${n}`));
   }
-  if (hasRating && result.difficulty !== undefined) {
-    card.appendChild(row('RMP difficulty', `${result.difficulty.toFixed(1)} / 5`));
+  if (hasRating && displayRmp.difficulty !== undefined) {
+    const diffLabel = displayRmp.scope === 'course' ? 'RMP difficulty (this course)' : 'RMP difficulty';
+    card.appendChild(row(diffLabel, `${displayRmp.difficulty.toFixed(1)} / 5`));
   } else if (result.difficulty !== undefined) {
     card.appendChild(row('Difficulty', `${result.difficulty.toFixed(1)} / 5`));
   }
   if (detail.wouldTakeAgainPct !== undefined) card.appendChild(row('Would take again', `${detail.wouldTakeAgainPct}%`));
-  if (result.sampleSize !== undefined) card.appendChild(row('Ratings', String(result.sampleSize)));
+  if (hasRating && displayRmp.sampleSize !== undefined) {
+    const ratingsLabel =
+      displayRmp.scope === 'course' ? 'RMP reviews (this course)' : 'Ratings';
+    card.appendChild(row(ratingsLabel, String(displayRmp.sampleSize)));
+  } else if (result.sampleSize !== undefined) {
+    card.appendChild(row('Ratings', String(result.sampleSize)));
+  }
 
   // Grade distribution histogram (from the bundled BoilerGrades data).
   if (result.gpaDistribution) {
@@ -405,14 +447,19 @@ export function createPopover(result, hooks = {}) {
   }
 
   // Recent student comments (from RateMyProfessors).
-  const reviewList = hooks.previewOnly ? (detail.reviews || []).slice(0, 2) : detail.reviews;
+  const courseReviewList = result.courseRmp?.reviews?.length ? result.courseRmp.reviews : [];
+  const allReviews = detail.reviews || [];
+  const previewSource = courseReviewList.length ? courseReviewList : allReviews;
+  const reviewList = hooks.previewOnly ? previewSource.slice(0, 2) : detail.reviews;
   /** @type {HTMLElement[]} */
   const previewReviewBodies = [];
   if (reviewList?.length) {
     card.appendChild(sectionLabel('Recent comments'));
     if (hooks.previewOnly) {
       const previewHint = document.createElement('div');
-      previewHint.textContent = 'AI-shortened when available — click badge for full panel.';
+      previewHint.textContent = courseReviewList.length
+        ? 'Reviews tagged for this course on RMP.'
+        : 'AI-shortened when available — click badge for full panel.';
       Object.assign(previewHint.style, { color: '#6b7280', fontSize: '10px', marginBottom: '4px' });
       card.appendChild(previewHint);
     }

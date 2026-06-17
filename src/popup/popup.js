@@ -44,7 +44,7 @@ function initPopup() {
     return;
   }
 
-  if (buildTagEl) buildTagEl.textContent = 'Build: 1.3.0-beta';
+  if (buildTagEl) buildTagEl.textContent = 'Build: 1.3.2-beta';
 
   if (settingsLink) {
     settingsLink.addEventListener('click', (e) => {

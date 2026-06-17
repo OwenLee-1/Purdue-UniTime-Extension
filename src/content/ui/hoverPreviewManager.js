@@ -1,7 +1,6 @@
 // Singleton hover preview card — one glance popover at a time across all badges.
 
 import { createPopover } from './Popover.js';
-
 /** @type {{ card: HTMLElement | null, host: Element | null, hideTimer: ReturnType<typeof setTimeout> | null }} */
 let state = { card: null, host: null, hideTimer: null };
 

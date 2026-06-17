@@ -1,11 +1,40 @@
 // Merge RMP + course GPA into one badge result.
 
 import { computeComposite, summarizeReviewSentiment } from './compositeScore.js';
+import { buildCourseRmpSnapshot } from './courseRmpFilter.js';
+import { normalizeCourseKey } from './courseKey.js';
 
 /** @param {*} v @returns {number|undefined} */
 function toNum(v) {
   const n = typeof v === 'number' ? v : parseFloat(v);
   return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * @param {import('./providers/Provider.js').ProviderResult} merged
+ * @param {string} [course]
+ */
+export function attachCourseRmp(merged, course) {
+  if (!merged) return merged;
+
+  const courseKey = normalizeCourseKey(course) || '';
+  const next = { ...merged };
+  delete next.courseRmp;
+
+  if (!courseKey) return next;
+
+  next.course = courseKey;
+  try {
+    const courseRmp = buildCourseRmpSnapshot(
+      courseKey,
+      merged.detail?.reviews,
+      merged.detail?.recentRatings
+    );
+    if (courseRmp) next.courseRmp = courseRmp;
+  } catch (err) {
+    console.warn('[Purdue RMP] course RMP filter failed:', err);
+  }
+  return next;
 }
 
 /**
@@ -53,5 +82,5 @@ export function mergeResults(rmpRes, gradesRes, course) {
   });
   if (composite) merged.composite = composite;
 
-  return merged;
+  return attachCourseRmp(merged, course);
 }

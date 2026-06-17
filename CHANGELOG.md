@@ -1,5 +1,31 @@
 # Changelog
 
+## [1.3.2-beta] — 2026-06-16
+
+UniTime freeze and sidebar interaction fixes on top of 1.3.1.
+
+### Added
+
+- Physical freeze layer + capture-phase guards so UniTime mini popups stay open while using RMP UI
+- MAIN-world `page-shield.js` to block GWT outside-click and Escape dismiss handlers during freeze
+- Pointer-zone hit testing for backdrop vs sidebar vs UniTime popup layering
+
+### Fixed
+
+- Sidebar renders on-page (iframes blocked by UniTime CSP); close button and outside-click dismiss work
+- Closing sidebar via ✕, Escape, or backdrop no longer dismisses open UniTime class-option popups
+- Removed inline script injection that violated UniTime CSP
+
+## [1.3.1-beta] — 2026-06-04
+
+Course-scoped RMP reviews. See [`BETA_1.3.1.md`](./BETA_1.3.1.md).
+
+### Added
+
+- Match RMP review class tags to the UniTime course being viewed
+- Course-specific RMP average, sentiment, and comments in panel/hover when n ≥ 3 tagged reviews
+- Fallback to overall RMP + all recent reviews when no course matches in the latest fetch
+
 ## [1.3.0-beta] — 2026-06-04
 
 Alpha feedback completion: hover preview restored, AI summaries, auto iCal. See [`BETA_1.3.0.md`](./BETA_1.3.0.md).

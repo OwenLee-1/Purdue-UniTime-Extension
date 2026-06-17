@@ -61,4 +61,4 @@ jobs:
             4. Click **Load unpacked** and select the **unzipped folder** (not the `.zip`).
             5. Open the extension popup → **Clear cached ratings** → reload your UniTime tab.
 
-            See [BETA_1.3.0.md](https://github.com/${{ github.repository }}/blob/main/BETA_1.3.0.md) for verification steps.
+            See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/main/CHANGELOG.md) for release notes.

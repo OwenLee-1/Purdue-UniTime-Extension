@@ -4,7 +4,9 @@
 // can reach common toggles without opening the toolbar popup.
 
 import { AI_SUMMARIES_STORAGE_KEY } from '../core/reviewSummarizer.js';
-import { sendToBackground } from '../shared/extensionMessaging.js';
+import { openExtensionOptionsPage } from '../shared/extensionMessaging.js';
+import { setBackgroundFreeze, applyUiLayerZ } from './ui/freezeController.js';
+import { bringRmpLayersToFront } from './ui/unitimeBackdrop.js';
 
 export const OVERLAY_SELECTOR = '.unitime-SuggestionsHint, .unitime-SuggestionsHintWidget';
 
@@ -81,25 +83,23 @@ function mountToggleRow(root, label, hint, storageKey, opts = {}) {
 }
 
 function mountSettingsMenu(initial) {
-  const host = document.createElement('div');
-  host.id = 'rmp-page-settings-host';
-  const shadow = host.attachShadow({ mode: 'open' });
-
   const wrap = document.createElement('div');
+  wrap.id = 'rmp-page-settings-host';
   Object.assign(wrap.style, {
     position: 'fixed',
     bottom: '16px',
     right: '16px',
-    zIndex: '2147483647',
+    display: 'flex',
+    flexDirection: 'column-reverse',
+    alignItems: 'flex-end',
+    gap: '8px',
     fontFamily: 'system-ui, sans-serif',
+    pointerEvents: 'auto',
   });
 
   const panel = document.createElement('div');
   Object.assign(panel.style, {
     display: 'none',
-    position: 'absolute',
-    right: '0',
-    bottom: '44px',
     width: 'min(280px, calc(100vw - 32px))',
     boxSizing: 'border-box',
     background: '#111827',
@@ -111,29 +111,11 @@ function mountSettingsMenu(initial) {
   });
 
   const header = document.createElement('div');
-  Object.assign(header.style, {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: '4px',
-  });
+  Object.assign(header.style, { marginBottom: '4px' });
   const heading = document.createElement('div');
   heading.textContent = 'Purdue RMP';
   Object.assign(heading.style, { fontWeight: '700', fontSize: '13px' });
-  const closeBtn = document.createElement('button');
-  closeBtn.type = 'button';
-  closeBtn.textContent = '✕';
-  Object.assign(closeBtn.style, {
-    border: 'none',
-    background: '#374151',
-    color: '#f9fafb',
-    width: '24px',
-    height: '24px',
-    borderRadius: '6px',
-    cursor: 'pointer',
-    fontSize: '12px',
-  });
-  header.append(heading, closeBtn);
+  header.appendChild(heading);
   panel.appendChild(header);
 
   const sub = document.createElement('div');
@@ -190,12 +172,9 @@ function mountSettingsMenu(initial) {
     cursor: 'pointer',
     fontFamily: 'inherit',
   });
-  fullBtn.addEventListener('click', async (e) => {
+  fullBtn.addEventListener('click', (e) => {
     e.stopPropagation();
-    const res = await sendToBackground({ type: 'OPEN_OPTIONS' });
-    if (!res.ok && chrome.runtime.getURL) {
-      window.open(chrome.runtime.getURL('src/options/index.html'), '_blank', 'noopener,noreferrer');
-    }
+    openExtensionOptionsPage();
     setOpen(false);
   });
   panel.appendChild(fullBtn);
@@ -215,10 +194,30 @@ function mountSettingsMenu(initial) {
     opacity: '0.92',
   });
 
+  let menuOpen = false;
+
+  function syncFreeze() {
+    setBackgroundFreeze(menuOpen, {
+      reason: 'settings',
+      onOutsideClick: dismissAll,
+    });
+  }
+
+  function dismissAll() {
+    menuOpen = false;
+    panel.style.display = 'none';
+    fab.textContent = '⚙ Settings';
+    fab.setAttribute('aria-expanded', 'false');
+    syncFreeze();
+  }
+
   function setOpen(open) {
+    menuOpen = open;
     panel.style.display = open ? 'block' : 'none';
     fab.textContent = open ? '✕ Close' : '⚙ Settings';
     fab.setAttribute('aria-expanded', open ? 'true' : 'false');
+    if (open) applyUiLayerZ(wrap);
+    syncFreeze();
   }
 
   function applyValues(s) {
@@ -239,29 +238,21 @@ function mountSettingsMenu(initial) {
 
   fab.addEventListener('click', (e) => {
     e.stopPropagation();
-    setOpen(panel.style.display === 'none');
+    if (menuOpen) dismissAll();
+    else setOpen(true);
   });
-  closeBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setOpen(false);
-  });
-  panel.addEventListener('click', (e) => e.stopPropagation());
 
   enabledBox.addEventListener('change', () => {
     note.hidden = false;
   });
 
-  document.addEventListener('click', (e) => {
-    if (e.composedPath().includes(host)) return;
-    setOpen(false);
-  });
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') setOpen(false);
+    if (e.key === 'Escape' && menuOpen) dismissAll();
   });
 
   wrap.append(panel, fab);
-  shadow.appendChild(wrap);
-  document.body.appendChild(host);
+  document.body.appendChild(wrap);
+  bringRmpLayersToFront();
 }
 
 /**

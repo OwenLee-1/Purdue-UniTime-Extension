@@ -34,6 +34,7 @@
  * @property {{A:number,B:number,C:number,D:number,F:number}} [gpaDistribution]  Avg letter-grade %.
  * @property {{ score: number, parts: import('../compositeScore.js').CompositePart[] }} [composite]
  * @property {{ avg: number, count: number, tone: string, positivePct: number }} [reviewSentiment]
+ * @property {import('../courseRmpFilter.js').CourseRmpSnapshot} [courseRmp]
  * @property {ProviderDetail} [detail]  Extra info shown in the hover card.
  */
 
