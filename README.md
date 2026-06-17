@@ -4,6 +4,8 @@ Alpha Version: A Chrome extension that give professor data alongside each profes
 
 Beta Version: Added more details under dropdown, created calculation for composite rating taking into account more details. Added RMP rating in hover box instead of main box. Beta version marks the temporary termination of the UniTime work, as I will shift to creating a larger database/website for full tracking, creating individualized plans for people based on majors, classes, teachers, etc. 
 
+Lastest Revision: Adjusted framing of pop up menu, fixed issues with navigation regarding UniTime background freezing. Focuses to sigular actions as user navigates interface. 
+
 > Status: **beta 1.3.3** — latest release [`CHANGELOG.md`](./CHANGELOG.md#133-beta--2026-06-17) · tag `v1.3.3-beta`. Prior: [`CHANGELOG.md`](./CHANGELOG.md#132-beta--2026-06-16). See [`BUILD_PLAN.md`](./BUILD_PLAN.md) for the full roadmap.
 
 ## Overview
