@@ -39,6 +39,9 @@ let swallowPointerId = null;
 
 let captureGuardInstalled = false;
 
+/** @type {{ element: Element | null, at: number }} */
+let lastShieldPress = { element: null, at: 0 };
+
 /** @type {WeakMap<Element, () => void>} */
 const shieldActions = new WeakMap();
 
@@ -55,6 +58,22 @@ export function wireProtectedControl(el, action) {
 
 function runShieldAction(el) {
   shieldActions.get(el)?.();
+}
+
+function shouldRunShieldAction(el, e) {
+  if (!DISMISS_POINTER_TYPES.has(e.type)) return false;
+
+  const now = Date.now();
+  if (
+    e.type === 'mousedown' &&
+    lastShieldPress.element === el &&
+    now - lastShieldPress.at < 80
+  ) {
+    return false;
+  }
+
+  lastShieldPress = { element: el, at: now };
+  return true;
 }
 
 function syncSwallowAttr() {
@@ -197,7 +216,7 @@ function onFreezeCapture(e) {
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    if (DISMISS_POINTER_TYPES.has(e.type)) {
+    if (shouldRunShieldAction(shieldControl, e)) {
       if (shieldControl.matches(RMP_DISMISS_SEL)) {
         scheduleDismissFromGesture(e);
       } else {
