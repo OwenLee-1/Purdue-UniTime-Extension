@@ -4,7 +4,6 @@
 import { lookupKey } from '../core/lookupKey.js';
 import { normalizeCourseKey } from '../core/courseKey.js';
 import { professorKey } from '../core/blocks.js';
-import { normalizeName } from '../core/matching.js';
 import { mergeResults, attachCourseRmp } from '../core/mergeResult.js';
 import { sendToBackground, wakeBackground } from '../shared/extensionMessaging.js';
 
@@ -133,17 +132,6 @@ function getRmpProfessorCache(rawName) {
     }
   }
 
-  const n = normalizeName(rawName);
-  if (!n.last) return undefined;
-
-  for (const [key, res] of rmpCacheByProfessor) {
-    if (!shouldCacheRmpResult(res) || key.startsWith('legacy:')) continue;
-    if ((res.sampleSize || 0) > 0 && !rmpResultHasReviewBatch(res)) continue;
-    const parts = key.split(':');
-    if (parts.length < 3 || parts[1] !== n.last) continue;
-    const cachedFirst = parts[2] || '';
-    if (!n.first || cachedFirst === n.first || cachedFirst[0] === n.first[0]) return res;
-  }
   return undefined;
 }
 
