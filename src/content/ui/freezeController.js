@@ -18,6 +18,7 @@ const FREEZE_ATTR = 'data-rmp-freeze-active';
 const FREEZE_POPUPS_ATTR = 'data-rmp-freeze-popups';
 const SETTINGS_TOP_Z = 2147483647;
 const SETTINGS_CATCHER_Z = 2147483646;
+const SHIELD_ACTION_DEDUPE_MS = 350;
 
 /** @type {Set<string>} */
 const activeReasons = new Set();
@@ -42,6 +43,9 @@ let captureGuardInstalled = false;
 /** @type {WeakMap<Element, () => void>} */
 const shieldActions = new WeakMap();
 
+/** @type {WeakMap<Element, number>} */
+const lastPointerShieldActionAt = new WeakMap();
+
 /**
  * Same gesture shield as the professor-panel ✕: capture pointerdown, swallow
  * the follow-up events, and run the action after GWT's outside-click pass.
@@ -55,6 +59,26 @@ export function wireProtectedControl(el, action) {
 
 function runShieldAction(el) {
   shieldActions.get(el)?.();
+}
+
+/**
+ * Mouse input fires pointerdown followed by a compatibility mousedown; both are
+ * swallowed, but the protected action should only run once for that gesture.
+ * @param {Element} el
+ * @param {Event} e
+ * @returns {boolean}
+ */
+function shouldRunShieldAction(el, e) {
+  const now = Date.now();
+  if (e.type === 'pointerdown') {
+    lastPointerShieldActionAt.set(el, now);
+    return true;
+  }
+  if (e.type === 'mousedown') {
+    const lastPointer = lastPointerShieldActionAt.get(el) || 0;
+    if (now - lastPointer < SHIELD_ACTION_DEDUPE_MS) return false;
+  }
+  return true;
 }
 
 function syncSwallowAttr() {
@@ -200,7 +224,7 @@ function onFreezeCapture(e) {
     if (DISMISS_POINTER_TYPES.has(e.type)) {
       if (shieldControl.matches(RMP_DISMISS_SEL)) {
         scheduleDismissFromGesture(e);
-      } else {
+      } else if (shouldRunShieldAction(shieldControl, e)) {
         scheduleProtectedDismiss(() => runShieldAction(shieldControl), e);
       }
     }
