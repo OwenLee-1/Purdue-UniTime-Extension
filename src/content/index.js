@@ -82,6 +82,15 @@ function refreshBadgesForProfessor(pk) {
   }
 }
 
+function retireBadgesForElement(element) {
+  for (const handle of [...badgeHandles]) {
+    if (handle.element !== element) continue;
+    handle.remove();
+    badgeHandles.delete(handle);
+    if (handle.entry) removeFromComparison(handle.entry);
+  }
+}
+
 async function boot() {
   await initOverlayControl();
   startIcalScraper();
@@ -144,6 +153,10 @@ async function boot() {
         );
       }
       return;
+    }
+
+    if (candidate.rehydrate) {
+      retireBadgesForElement(candidate.element);
     }
 
     if (debug) {
