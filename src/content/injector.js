@@ -1,6 +1,7 @@
 // The "hands" of the on-page helper: it places a badge into the page.
 
 import { createBadge } from './ui/Badge.js';
+import { SKIP_REHYDRATE_ATTR } from './detector.js';
 import {
   openProfessorSidebar,
   closeProfessorSidebar,
@@ -45,6 +46,7 @@ const HOVER_SHOW_DELAY_MS = 280;
  */
 export function injectBadge(target, ctx = {}) {
   if (target.querySelector('.rmp-badge-host')) return null;
+  target.removeAttribute(SKIP_REHYDRATE_ATTR);
 
   const host = document.createElement('span');
   host.className = 'rmp-badge-host';
@@ -144,6 +146,7 @@ export function injectBadge(target, ctx = {}) {
   return {
     async setResult(result) {
       if (result?.status === 'staff_tba') {
+        target.setAttribute(SKIP_REHYDRATE_ATTR, ctx.rawName || '');
         host.remove();
         if (isHoverPreviewOpenFor(host)) hideHoverPreview();
         if (isSidebarOpenFor(host)) closeProfessorSidebar();

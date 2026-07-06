@@ -11,6 +11,7 @@
 import { normalizeCourseKey } from '../core/courseKey.js';
 
 const PROCESSED_ATTR = 'data-rmp-seen';
+const SKIP_REHYDRATE_ATTR = 'data-rmp-skip-rehydrate';
 
 /** Headers that identify a schedule table (List of Classes or Alternatives dialog). */
 const SCHEDULE_MARKERS = ['Instructor', 'CRN-SectionId'];
@@ -109,6 +110,7 @@ function readInstructorCellText(cell) {
  * @property {Element} rowElement
  * @property {string} [courseContext]
  * @property {boolean} [updateCourseOnly]
+ * @property {boolean} [rehydrate]
  */
 
 /**
@@ -310,7 +312,12 @@ function scanOnce(onFound) {
         continue;
       }
 
-      if (cell.hasAttribute(PROCESSED_ATTR)) continue;
+      const wasProcessed = cell.hasAttribute(PROCESSED_ATTR);
+      if (wasProcessed) {
+        const skipName = cell.getAttribute(SKIP_REHYDRATE_ATTR);
+        if (skipName === text) continue;
+        if (skipName) cell.removeAttribute(SKIP_REHYDRATE_ATTR);
+      }
 
       cell.setAttribute(PROCESSED_ATTR, 'true');
       onFound({
@@ -318,6 +325,7 @@ function scanOnce(onFound) {
         element: cell,
         rowElement: row,
         courseContext: normalizedCourse,
+        rehydrate: wasProcessed,
       });
     }
   }
@@ -376,4 +384,4 @@ export function applyBlockVisibility(blocksMap, keyFor) {
   }
 }
 
-export { PROCESSED_ATTR };
+export { PROCESSED_ATTR, SKIP_REHYDRATE_ATTR };
