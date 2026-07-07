@@ -12,6 +12,7 @@ const DISMISS_POINTER_TYPES = new Set(['pointerdown', 'mousedown']);
 const RMP_DISMISS_SEL = '.rmp-panel-close, .rmp-settings-close';
 const RMP_SHIELD_SEL = `${RMP_DISMISS_SEL}, .rmp-settings-control`;
 const RMP_INTERIOR_ZONES = new Set([POINTER_ZONE.SETTINGS, POINTER_ZONE.SIDEBAR]);
+const DISMISS_PRIORITY = ['sidebar', 'settings'];
 const SWALLOW_TAIL_MS = 450;
 const SWALLOW_ATTR = 'data-rmp-gesture-swallow-until';
 const FREEZE_ATTR = 'data-rmp-freeze-active';
@@ -127,13 +128,34 @@ function installCaptureGuard() {
   document.addEventListener('keydown', onFreezeKeydown, true);
 }
 
-function runDismissHandlers() {
+export function getTopDismissReason() {
+  for (let i = DISMISS_PRIORITY.length - 1; i >= 0; i -= 1) {
+    const reason = DISMISS_PRIORITY[i];
+    if (dismissHandlers.has(reason)) return reason;
+  }
+  const reasons = [...dismissHandlers.keys()];
+  return reasons[reasons.length - 1] || null;
+}
+
+/**
+ * @param {Element} el
+ * @returns {string | null}
+ */
+function dismissReasonForControl(el) {
+  if (el.closest('.rmp-settings-close')) return 'settings';
+  if (el.closest('.rmp-panel-close')) return 'sidebar';
+  return null;
+}
+
+/**
+ * @param {string | null} [reason]
+ */
+function runDismissHandlers(reason = getTopDismissReason()) {
   const now = Date.now();
   if (now - lastDismissAt < 300) return;
   lastDismissAt = now;
-  for (const handler of dismissHandlers.values()) {
-    handler();
-  }
+  if (!reason) return;
+  dismissHandlers.get(reason)?.();
 }
 
 /**
@@ -152,8 +174,8 @@ export function scheduleProtectedDismiss(fn, e) {
   window.setTimeout(() => fn(), 0);
 }
 
-function scheduleDismissFromGesture(e) {
-  scheduleProtectedDismiss(runDismissHandlers, e);
+function scheduleDismissFromGesture(e, reason) {
+  scheduleProtectedDismiss(() => runDismissHandlers(reason), e);
 }
 
 /** @param {KeyboardEvent} e */
@@ -199,7 +221,7 @@ function onFreezeCapture(e) {
     e.stopImmediatePropagation();
     if (DISMISS_POINTER_TYPES.has(e.type)) {
       if (shieldControl.matches(RMP_DISMISS_SEL)) {
-        scheduleDismissFromGesture(e);
+        scheduleDismissFromGesture(e, dismissReasonForControl(shieldControl));
       } else {
         scheduleProtectedDismiss(() => runShieldAction(shieldControl), e);
       }
