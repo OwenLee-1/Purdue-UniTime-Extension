@@ -6,6 +6,7 @@
   "description": "Chrome extension that overlays RateMyProfessors ratings inline on Purdue's UniTime scheduling site.",
   "scripts": {
     "dev": "vite",
+    "test": "node --test",
     "build": "vite build",
     "preview": "vite preview",
     "build:grades": "node scripts/build-grades.mjs"
