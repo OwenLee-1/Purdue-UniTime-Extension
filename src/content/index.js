@@ -18,6 +18,7 @@ import {
   onProfessorRmpReady,
 } from './lookup.js';
 import { startIcalScraper } from './icalScraper.js';
+import { clearStaleExtensionArtifacts } from './staleArtifacts.js';
 
 /** @type {Set<import('./injector.js').BadgeHandle>} */
 const badgeHandles = new Set();
@@ -83,6 +84,7 @@ function refreshBadgesForProfessor(pk) {
 }
 
 async function boot() {
+  clearStaleExtensionArtifacts();
   await initOverlayControl();
   startIcalScraper();
 
