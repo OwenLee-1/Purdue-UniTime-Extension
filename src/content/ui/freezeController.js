@@ -42,6 +42,9 @@ let captureGuardInstalled = false;
 /** @type {WeakMap<Element, () => void>} */
 const shieldActions = new WeakMap();
 
+/** @type {{ el: Element | null, until: number }} */
+let lastShieldActionGesture = { el: null, until: 0 };
+
 /**
  * Same gesture shield as the professor-panel ✕: capture pointerdown, swallow
  * the follow-up events, and run the action after GWT's outside-click pass.
@@ -55,6 +58,21 @@ export function wireProtectedControl(el, action) {
 
 function runShieldAction(el) {
   shieldActions.get(el)?.();
+}
+
+function shouldScheduleShieldAction(el, e) {
+  const now = Date.now();
+  if (
+    e.type === 'mousedown' &&
+    lastShieldActionGesture.el === el &&
+    now < lastShieldActionGesture.until
+  ) {
+    return false;
+  }
+  if (e.type === 'pointerdown' || e.type === 'mousedown') {
+    lastShieldActionGesture = { el, until: now + SWALLOW_TAIL_MS };
+  }
+  return true;
 }
 
 function syncSwallowAttr() {
@@ -200,8 +218,10 @@ function onFreezeCapture(e) {
     if (DISMISS_POINTER_TYPES.has(e.type)) {
       if (shieldControl.matches(RMP_DISMISS_SEL)) {
         scheduleDismissFromGesture(e);
-      } else {
+      } else if (shouldScheduleShieldAction(shieldControl, e)) {
         scheduleProtectedDismiss(() => runShieldAction(shieldControl), e);
+      } else {
+        scheduleProtectedDismiss(() => {}, e);
       }
     }
     return;
