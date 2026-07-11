@@ -88,6 +88,11 @@ function rmpResultHasReviewBatch(result) {
   return !!(result.detail.recentRatings?.length || result.detail.reviews?.length);
 }
 
+function hasCompleteSharedRmpResult(result) {
+  if (!shouldCacheRmpResult(result)) return false;
+  return (result.sampleSize || 0) <= 0 || rmpResultHasReviewBatch(result);
+}
+
 function invalidateMergedCacheForProfessor(pk) {
   if (!pk) return;
   const prefix = `${pk}::`;
@@ -253,7 +258,9 @@ async function flushBatch() {
     if (shouldCacheRmpResult(rmpRes)) {
       const queryForPk = queries.find((q) => professorKey(q.rawName) === pk);
       storeRmpProfessorCache(queryForPk?.rawName || '', rmpRes);
-      newlyCachedProfessors.push({ pk, rmpRes: cloneResult(rmpRes) });
+      if (hasCompleteSharedRmpResult(rmpRes)) {
+        newlyCachedProfessors.push({ pk, rmpRes: cloneResult(rmpRes) });
+      }
     }
   }
 
