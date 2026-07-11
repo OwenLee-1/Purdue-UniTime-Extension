@@ -28,8 +28,11 @@ async function persistIcalUrl(url, source) {
   const normalized = normalizeIcalUrl(url);
   if (!looksLikeIcalUrl(normalized)) return false;
 
-  const stored = await chrome.storage.local.get([ICAL_STORAGE_KEY]);
+  const stored = await chrome.storage.local.get([ICAL_STORAGE_KEY, ICAL_SOURCE_KEY]);
   if (stored[ICAL_STORAGE_KEY] === normalized) return true;
+  if (stored[ICAL_SOURCE_KEY] === 'manual' && stored[ICAL_STORAGE_KEY]) {
+    return false;
+  }
 
   await chrome.storage.local.set({
     [ICAL_STORAGE_KEY]: normalized,
