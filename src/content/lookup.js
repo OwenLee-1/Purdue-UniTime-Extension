@@ -4,7 +4,6 @@
 import { lookupKey } from '../core/lookupKey.js';
 import { normalizeCourseKey } from '../core/courseKey.js';
 import { professorKey } from '../core/blocks.js';
-import { normalizeName } from '../core/matching.js';
 import { mergeResults, attachCourseRmp } from '../core/mergeResult.js';
 import { sendToBackground, wakeBackground } from '../shared/extensionMessaging.js';
 
@@ -79,13 +78,14 @@ function shouldCacheMergedResult(result) {
 /**
  * @param {object} result
  */
-function shouldCacheRmpResult(result) {
-  return result?.status === 'ok' && typeof result.overall === 'number';
-}
-
 function rmpResultHasReviewBatch(result) {
   if (!result?.detail) return false;
   return !!(result.detail.recentRatings?.length || result.detail.reviews?.length);
+}
+
+export function isReusableRmpResult(result) {
+  if (result?.status !== 'ok' || typeof result.overall !== 'number') return false;
+  return (result.sampleSize || 0) <= 0 || rmpResultHasReviewBatch(result);
 }
 
 function invalidateMergedCacheForProfessor(pk) {
@@ -127,22 +127,7 @@ function getRmpProfessorCache(rawName) {
   const pk = professorKey(rawName);
   if (pk) {
     const hit = rmpCacheByProfessor.get(pk);
-    if (shouldCacheRmpResult(hit)) {
-      if ((hit.sampleSize || 0) > 0 && !rmpResultHasReviewBatch(hit)) return undefined;
-      return hit;
-    }
-  }
-
-  const n = normalizeName(rawName);
-  if (!n.last) return undefined;
-
-  for (const [key, res] of rmpCacheByProfessor) {
-    if (!shouldCacheRmpResult(res) || key.startsWith('legacy:')) continue;
-    if ((res.sampleSize || 0) > 0 && !rmpResultHasReviewBatch(res)) continue;
-    const parts = key.split(':');
-    if (parts.length < 3 || parts[1] !== n.last) continue;
-    const cachedFirst = parts[2] || '';
-    if (!n.first || cachedFirst === n.first || cachedFirst[0] === n.first[0]) return res;
+    if (isReusableRmpResult(hit)) return hit;
   }
   return undefined;
 }
@@ -250,7 +235,7 @@ async function flushBatch() {
   const newlyCachedProfessors = [];
 
   for (const [pk, rmpRes] of Object.entries(rmpBatch)) {
-    if (shouldCacheRmpResult(rmpRes)) {
+    if (isReusableRmpResult(rmpRes)) {
       const queryForPk = queries.find((q) => professorKey(q.rawName) === pk);
       storeRmpProfessorCache(queryForPk?.rawName || '', rmpRes);
       newlyCachedProfessors.push({ pk, rmpRes: cloneResult(rmpRes) });

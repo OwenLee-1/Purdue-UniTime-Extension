@@ -24,6 +24,7 @@ const SUBJECT_ALIASES = {
   STAT: ['STAT', 'STATISTICS'],
   AAE: ['AAE', 'AERO', 'AEROSPACE'],
   ME: ['ME', 'MECH', 'MECHANICAL'],
+  MSE: ['MSE', 'MATERIALS'],
   ECE: ['ECE', 'EE', 'ELECTRICAL'],
   PHYS: ['PHYS', 'PHYSICS'],
   CHM: ['CHM', 'CHEM', 'CHEMISTRY'],
@@ -90,12 +91,9 @@ function parseRmpClass(rmpClass) {
 function subjectsCompatible(subjectCode, rmpSubject) {
   if (!subjectCode || !rmpSubject) return false;
   if (subjectCode === rmpSubject) return true;
-  if (rmpSubject.startsWith(subjectCode) || subjectCode.startsWith(rmpSubject)) return true;
   const left = SUBJECT_ALIASES[subjectCode] || [subjectCode];
   const right = SUBJECT_ALIASES[rmpSubject] || [rmpSubject];
-  return left.some((a) =>
-    right.some((b) => a === b || a.startsWith(b) || b.startsWith(a))
-  );
+  return left.some((a) => right.some((b) => a === b));
 }
 
 /**
@@ -114,7 +112,7 @@ export function courseMatchesRmpClass(courseKey, rmpClass) {
   const numberHit = parsed.numbers.some((n) => numberVariants.includes(n));
   if (!numberHit) return false;
 
-  if (!parsed.subjects.length) return numberHit;
+  if (!parsed.subjects.length) return false;
 
   return parsed.subjects.some((s) => subjectsCompatible(subject, s));
 }

@@ -11,6 +11,7 @@ const CAPTURE_EVENTS = ['mousedown', 'mouseup', 'click', 'pointerdown', 'pointer
 const DISMISS_POINTER_TYPES = new Set(['pointerdown', 'mousedown']);
 const RMP_DISMISS_SEL = '.rmp-panel-close, .rmp-settings-close';
 const RMP_SHIELD_SEL = `${RMP_DISMISS_SEL}, .rmp-settings-control`;
+const STALE_RMP_UI_SEL = '.rmp-professor-panel, #rmp-page-settings-host, .rmp-hover-preview';
 const RMP_INTERIOR_ZONES = new Set([POINTER_ZONE.SETTINGS, POINTER_ZONE.SIDEBAR]);
 const SWALLOW_TAIL_MS = 450;
 const SWALLOW_ATTR = 'data-rmp-gesture-swallow-until';
@@ -127,6 +128,15 @@ function installCaptureGuard() {
   document.addEventListener('keydown', onFreezeKeydown, true);
 }
 
+function removeStaleFreezeDom() {
+  if (activeReasons.size > 0) return;
+  document.documentElement.removeAttribute(FREEZE_ATTR);
+  document.documentElement.removeAttribute(FREEZE_POPUPS_ATTR);
+  document.documentElement.removeAttribute(SWALLOW_ATTR);
+  document.getElementById('rmp-freeze-catcher')?.remove();
+  for (const el of document.querySelectorAll(STALE_RMP_UI_SEL)) el.remove();
+}
+
 function runDismissHandlers() {
   const now = Date.now();
   if (now - lastDismissAt < 300) return;
@@ -154,6 +164,11 @@ export function scheduleProtectedDismiss(fn, e) {
 
 function scheduleDismissFromGesture(e) {
   scheduleProtectedDismiss(runDismissHandlers, e);
+}
+
+/** @param {Event} e */
+function isKeyboardClick(e) {
+  return e.type === 'click' && 'detail' in e && e.detail === 0;
 }
 
 /** @param {KeyboardEvent} e */
@@ -187,17 +202,21 @@ function onFreezeCapture(e) {
   // receive outside-click dismiss while toggling options.
   const keepPopups = !activeReasons.has('settings');
   const resolved = resolvePointerAt(x, y, { keepUnitimePopups: keepPopups });
-  const shieldControl = resolved.stack
-    .map(({ element }) =>
-      element instanceof Element ? element.closest(RMP_SHIELD_SEL) : null
-    )
-    .find(Boolean);
+  const targetControl =
+    e.target instanceof Element ? e.target.closest(RMP_SHIELD_SEL) : null;
+  const shieldControl =
+    targetControl ||
+    resolved.stack
+      .map(({ element }) =>
+        element instanceof Element ? element.closest(RMP_SHIELD_SEL) : null
+      )
+      .find(Boolean);
 
   if (frozen && shieldControl instanceof Element) {
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    if (DISMISS_POINTER_TYPES.has(e.type)) {
+    if (DISMISS_POINTER_TYPES.has(e.type) || isKeyboardClick(e)) {
       if (shieldControl.matches(RMP_DISMISS_SEL)) {
         scheduleDismissFromGesture(e);
       } else {
@@ -233,6 +252,7 @@ function onFreezeCapture(e) {
   }
 }
 
+removeStaleFreezeDom();
 installCaptureGuard();
 
 /**
