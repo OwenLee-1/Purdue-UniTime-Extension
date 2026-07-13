@@ -42,6 +42,9 @@ let captureGuardInstalled = false;
 /** @type {WeakMap<Element, () => void>} */
 const shieldActions = new WeakMap();
 
+/** @type {{ element: Element | null, until: number }} */
+let recentPointerShield = { element: null, until: 0 };
+
 /**
  * Same gesture shield as the professor-panel ✕: capture pointerdown, swallow
  * the follow-up events, and run the action after GWT's outside-click pass.
@@ -57,6 +60,27 @@ function runShieldAction(el) {
   shieldActions.get(el)?.();
 }
 
+/**
+ * Mouse input fires pointerdown followed by a compatibility mousedown. Treat
+ * that pair as one shield activation so controls do not toggle twice.
+ * @param {Element} el
+ * @param {Event} e
+ */
+function shouldRunShieldActivation(el, e) {
+  const now = Date.now();
+  if (
+    e.type === 'mousedown' &&
+    recentPointerShield.element === el &&
+    now < recentPointerShield.until
+  ) {
+    return false;
+  }
+  if (e.type === 'pointerdown') {
+    recentPointerShield = { element: el, until: now + SWALLOW_TAIL_MS };
+  }
+  return true;
+}
+
 function syncSwallowAttr() {
   if (Date.now() < swallowUntil) {
     document.documentElement.setAttribute(SWALLOW_ATTR, String(swallowUntil));
@@ -68,6 +92,7 @@ function syncSwallowAttr() {
 function clearGestureSwallow() {
   swallowUntil = 0;
   swallowPointerId = null;
+  recentPointerShield = { element: null, until: 0 };
   syncSwallowAttr();
 }
 
@@ -197,7 +222,7 @@ function onFreezeCapture(e) {
     e.preventDefault();
     e.stopPropagation();
     e.stopImmediatePropagation();
-    if (DISMISS_POINTER_TYPES.has(e.type)) {
+    if (DISMISS_POINTER_TYPES.has(e.type) && shouldRunShieldActivation(shieldControl, e)) {
       if (shieldControl.matches(RMP_DISMISS_SEL)) {
         scheduleDismissFromGesture(e);
       } else {
