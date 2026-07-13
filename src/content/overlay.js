@@ -11,6 +11,7 @@ import {
   scheduleProtectedDismiss,
   wireProtectedControl,
 } from './ui/freezeController.js';
+import { hideHoverPreview } from './ui/hoverPreviewManager.js';
 import { bringRmpLayersToFront } from './ui/unitimeBackdrop.js';
 
 export const OVERLAY_SELECTOR = '.unitime-SuggestionsHint, .unitime-SuggestionsHintWidget';
@@ -227,6 +228,7 @@ function mountSettingsMenu(initial) {
     fab.setAttribute('aria-expanded', open ? 'true' : 'false');
     fab.classList.toggle('rmp-settings-close', open);
     if (open) {
+      hideHoverPreview();
       applyUiLayerZ(wrap);
       bringRmpLayersToFront();
     }
