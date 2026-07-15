@@ -7,7 +7,7 @@ import { hideHoverPreview } from './hoverPreviewManager.js';
 import { bringRmpLayersToFront } from './unitimeBackdrop.js';
 import { applyUiLayerZ, setBackgroundFreeze } from './freezeController.js';
 
-/** @type {{ root: HTMLElement, host: Element | null } | null} */
+/** @type {{ root: HTMLElement, flushPendingChanges: () => void, host: Element | null } | null} */
 let openPanel = null;
 
 /**
@@ -25,12 +25,12 @@ export function openProfessorSidebar(result, hooks, host) {
 
   closeProfessorSidebar();
 
-  const { root: panel } = createProfessorPanel(result, hooks, document);
+  const { root: panel, flushPendingChanges } = createProfessorPanel(result, hooks, document);
   document.body.appendChild(panel);
   applyUiLayerZ(panel);
 
   bringRmpLayersToFront();
-  openPanel = { root: panel, host };
+  openPanel = { root: panel, flushPendingChanges, host };
   setBackgroundFreeze(true, {
     reason: 'sidebar',
     onOutsideClick: () => {
@@ -42,9 +42,11 @@ export function openProfessorSidebar(result, hooks, host) {
 
 export function closeProfessorSidebar() {
   if (!openPanel) return;
-  setBackgroundFreeze(false, { reason: 'sidebar' });
-  openPanel.root.remove();
+  const panel = openPanel;
   openPanel = null;
+  panel.flushPendingChanges();
+  setBackgroundFreeze(false, { reason: 'sidebar' });
+  panel.root.remove();
 }
 
 /**
