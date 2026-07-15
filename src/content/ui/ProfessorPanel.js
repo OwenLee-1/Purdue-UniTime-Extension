@@ -6,6 +6,17 @@ import { pickDisplayRmp } from '../../core/displayRmp.js';
 
 const COMMENT_LINE_CLAMP = 2;
 
+function createPendingValueSaver(initialValue, onSave) {
+  let lastSubmittedValue = String(initialValue ?? '');
+  return (value) => {
+    const nextValue = String(value ?? '');
+    if (nextValue === lastSubmittedValue) return false;
+    lastSubmittedValue = nextValue;
+    onSave(nextValue);
+    return true;
+  };
+}
+
 function colorFor(overall) {
   if (overall === undefined) return '#9ca3af';
   if (overall >= 4) return '#16a34a';
@@ -128,7 +139,7 @@ function gradeDistribution(dist, doc) {
  * @param {import('../../core/providers/Provider.js').ProviderResult} result
  * @param {PanelHooks} [hooks]
  * @param {Document} [doc]
- * @returns {{ root: HTMLElement }}
+ * @returns {{ root: HTMLElement, flushPendingChanges: () => void }}
  */
 export function createProfessorPanel(result, hooks = {}, doc = document) {
   const detail = result.detail || {};
@@ -511,6 +522,7 @@ export function createProfessorPanel(result, hooks = {}, doc = document) {
     body.appendChild(reviewSection);
   }
 
+  let flushPendingChanges = () => {};
   if (hooks.rawName && hooks.onMarkUpdate) {
     const marksSection = sectionBlock('Your take', doc);
     const btnRow = doc.createElement('div');
@@ -568,7 +580,14 @@ export function createProfessorPanel(result, hooks = {}, doc = document) {
       fontSize: '12px',
       resize: 'vertical',
     });
-    noteInput.addEventListener('change', () => hooks.onMarkUpdate?.({ note: noteInput.value }));
+    const savePendingNote = createPendingValueSaver(
+      noteInput.value,
+      (note) => hooks.onMarkUpdate?.({ note })
+    );
+    flushPendingChanges = () => {
+      savePendingNote(noteInput.value);
+    };
+    noteInput.addEventListener('change', flushPendingChanges);
     marksSection.appendChild(noteInput);
     body.appendChild(marksSection);
   }
@@ -612,5 +631,5 @@ export function createProfessorPanel(result, hooks = {}, doc = document) {
 
   panel.appendChild(body);
 
-  return { root: panel };
+  return { root: panel, flushPendingChanges };
 }
