@@ -1,8 +1,11 @@
 // Professors the user chose to hide — stored locally only (chrome.storage.local).
 
 import { normalizeName } from './matching.js';
+import { createAsyncQueue } from './asyncQueue.js';
 
 export const BLOCKS_STORAGE_KEY = 'user-blocks';
+
+const enqueueBlockWrite = createAsyncQueue();
 
 /**
  * Stable id for a professor (school + normalized last/first).
@@ -42,16 +45,18 @@ export async function setBlocked(rawName, blocked) {
   const key = professorKey(rawName);
   if (!key) return;
 
-  const stored = await chrome.storage.local.get(BLOCKS_STORAGE_KEY);
-  const entries = { ...(stored[BLOCKS_STORAGE_KEY]?.entries || {}) };
+  return enqueueBlockWrite(async () => {
+    const stored = await chrome.storage.local.get(BLOCKS_STORAGE_KEY);
+    const entries = { ...(stored[BLOCKS_STORAGE_KEY]?.entries || {}) };
 
-  if (blocked) {
-    entries[key] = { rawName, blockedAt: Date.now() };
-  } else {
-    delete entries[key];
-  }
+    if (blocked) {
+      entries[key] = { rawName, blockedAt: Date.now() };
+    } else {
+      delete entries[key];
+    }
 
-  await chrome.storage.local.set({ [BLOCKS_STORAGE_KEY]: { entries } });
+    await chrome.storage.local.set({ [BLOCKS_STORAGE_KEY]: { entries } });
+  });
 }
 
 /** @returns {Promise<Array<{ key: string, rawName: string, blockedAt: number }>>} */
