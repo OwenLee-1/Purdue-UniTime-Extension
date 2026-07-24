@@ -2,8 +2,11 @@
 // Stored locally only — never sent to a server.
 
 import { professorKey } from './blocks.js';
+import { createAsyncQueue } from './asyncQueue.js';
 
 export const MARKS_STORAGE_KEY = 'user-marks';
+
+const enqueueMarkWrite = createAsyncQueue();
 
 /**
  * @typedef {Object} UserMark
@@ -27,6 +30,7 @@ export async function getMark(rawName) {
 
 /**
  * Merge updates for a professor. Pass sentiment: null to clear like/dislike.
+ * Concurrent callers are serialized so patches merge instead of clobbering.
  * @param {string} rawName
  * @param {Partial<UserMark>} patch
  * @returns {Promise<UserMark | null>}
@@ -35,27 +39,29 @@ export async function updateMark(rawName, patch) {
   const key = professorKey(rawName);
   if (!key) return null;
 
-  const stored = await chrome.storage.local.get(MARKS_STORAGE_KEY);
-  const entries = { ...(stored[MARKS_STORAGE_KEY]?.entries || {}) };
-  const prev = entries[key] || { rawName };
+  return enqueueMarkWrite(async () => {
+    const stored = await chrome.storage.local.get(MARKS_STORAGE_KEY);
+    const entries = { ...(stored[MARKS_STORAGE_KEY]?.entries || {}) };
+    const prev = entries[key] || { rawName };
 
-  const next = {
-    rawName,
-    sentiment: patch.sentiment !== undefined ? patch.sentiment : prev.sentiment ?? null,
-    taken: patch.taken !== undefined ? patch.taken : !!prev.taken,
-    note: patch.note !== undefined ? String(patch.note).trim() : (prev.note || ''),
-    updatedAt: Date.now(),
-  };
+    const next = {
+      rawName,
+      sentiment: patch.sentiment !== undefined ? patch.sentiment : prev.sentiment ?? null,
+      taken: patch.taken !== undefined ? patch.taken : !!prev.taken,
+      note: patch.note !== undefined ? String(patch.note).trim() : (prev.note || ''),
+      updatedAt: Date.now(),
+    };
 
-  if (!next.sentiment && !next.taken && !next.note) {
-    delete entries[key];
+    if (!next.sentiment && !next.taken && !next.note) {
+      delete entries[key];
+      await chrome.storage.local.set({ [MARKS_STORAGE_KEY]: { entries } });
+      return null;
+    }
+
+    entries[key] = next;
     await chrome.storage.local.set({ [MARKS_STORAGE_KEY]: { entries } });
-    return null;
-  }
-
-  entries[key] = next;
-  await chrome.storage.local.set({ [MARKS_STORAGE_KEY]: { entries } });
-  return next;
+    return next;
+  });
 }
 
 /** @returns {Promise<UserMark[]>} */
