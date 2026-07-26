@@ -102,12 +102,11 @@ export function scoreMatch(a, b) {
     if (a.first === b.first) return 1.0;
     if (a.first[0] !== b.first[0]) return 0.4;
 
-    // Same starting letter — full first vs initial(s).
+    // Same starting letter — allow initial↔full or shared prefix (Rob/Robert),
+    // but never treat unrelated full names (John/James, John/Jane) as a match.
     const aInit = a.first.replace(/[^a-z]/g, '');
     const bInit = b.first.replace(/[^a-z]/g, '');
-    if (aInit.length > 1 && bInit.length > 1) return 0.85;
     if (aInit.length === 1 && bInit.length === 1) return aInit === bInit ? 0.85 : 0.4;
-    // One side is a single initial (or "pp") matching the other's prefix.
     const short = aInit.length <= bInit.length ? aInit : bInit;
     const long = aInit.length <= bInit.length ? bInit : aInit;
     if (short && long.startsWith(short)) return 0.85;
