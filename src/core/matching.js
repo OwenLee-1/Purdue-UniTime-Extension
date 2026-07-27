@@ -144,9 +144,10 @@ const CONFIDENCE_THRESHOLD = 0.8;
 /** @type {Record<string, string[]>} */
 const DEPT_HINTS_BY_PREFIX = {
   MA: ['mathematics', 'math'],
-  CS: ['computer science', 'computer', 'cs'],
+  // Do not use bare "cs" — it is a substring of physics/mathematics/economics/classics/statistics.
+  CS: ['computer science', 'computer'],
   STAT: ['statistics', 'stat'],
-  AAE: ['aerospace', 'astronautical', 'aa'],
+  AAE: ['aerospace', 'astronautical'],
   ME: ['mechanical'],
   ECE: ['electrical', 'ece'],
   PHYS: ['physics', 'phys'],
@@ -169,13 +170,25 @@ export function departmentHintsFromCourse(course) {
 }
 
 /**
+ * Match RMP department strings to course-derived hints.
+ * Short codes (≤3 chars) must be whole tokens so "cs" cannot match "physics".
  * @param {string} department
  * @param {string[]} hints
  */
 function departmentMatchesHints(department, hints) {
   if (!hints.length) return false;
   const d = String(department || '').toLowerCase();
-  return hints.some((h) => d.includes(h));
+  if (!d) return false;
+  return hints.some((h) => {
+    const hint = String(h || '').toLowerCase().trim();
+    if (!hint) return false;
+    if (hint.length <= 3) {
+      return new RegExp(`(?:^|[^a-z])${hint.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:[^a-z]|$)`).test(
+        d
+      );
+    }
+    return d.includes(hint);
+  });
 }
 
 /**
