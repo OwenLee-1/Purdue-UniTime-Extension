@@ -5,6 +5,7 @@ import { lookupKey } from '../core/lookupKey.js';
 import { normalizeCourseKey } from '../core/courseKey.js';
 import { professorKey } from '../core/blocks.js';
 import { normalizeName } from '../core/matching.js';
+import { rmpCacheIdentityKey, rmpIdentityNeedsCourse } from '../core/rmpIdentity.js';
 import { mergeResults, attachCourseRmp } from '../core/mergeResult.js';
 import { sendToBackground, wakeBackground } from '../shared/extensionMessaging.js';
 
@@ -101,13 +102,16 @@ function cloneResult(result) {
 }
 
 /**
- * @param {string} rawName
+ * @param {{ rawName: string, school?: string, course?: string }} query
  * @param {object} rmpRes
  */
-function storeRmpProfessorCache(rawName, rmpRes) {
+function storeRmpProfessorCache(query, rmpRes) {
   const copy = cloneResult(rmpRes);
-  const pk = professorKey(rawName);
-  if (pk) rmpCacheByProfessor.set(pk, copy);
+  const idKey = rmpCacheIdentityKey(query);
+  if (idKey) rmpCacheByProfessor.set(idKey, copy);
+
+  // Initial-only identities are course-scoped — do not alias onto a shared key.
+  if (rmpIdentityNeedsCourse(query.rawName)) return;
 
   const detailName = rmpRes?.detail?.name;
   if (detailName) {
@@ -120,24 +124,27 @@ function storeRmpProfessorCache(rawName, rmpRes) {
 }
 
 /**
- * @param {string} rawName
+ * @param {{ rawName: string, school?: string, course?: string }} query
  * @returns {object|undefined}
  */
-function getRmpProfessorCache(rawName) {
-  const pk = professorKey(rawName);
-  if (pk) {
-    const hit = rmpCacheByProfessor.get(pk);
+function getRmpProfessorCache(query) {
+  const idKey = rmpCacheIdentityKey(query);
+  if (idKey) {
+    const hit = rmpCacheByProfessor.get(idKey);
     if (shouldCacheRmpResult(hit)) {
       if ((hit.sampleSize || 0) > 0 && !rmpResultHasReviewBatch(hit)) return undefined;
       return hit;
     }
   }
 
-  const n = normalizeName(rawName);
+  // Initial-only names must not reuse another course's (or fuzzy) RMP hit.
+  if (rmpIdentityNeedsCourse(query.rawName)) return undefined;
+
+  const n = normalizeName(query.rawName);
   if (!n.last) return undefined;
 
   for (const [key, res] of rmpCacheByProfessor) {
-    if (!shouldCacheRmpResult(res) || key.startsWith('legacy:')) continue;
+    if (!shouldCacheRmpResult(res) || key.startsWith('legacy:') || key.includes('::')) continue;
     if ((res.sampleSize || 0) > 0 && !rmpResultHasReviewBatch(res)) continue;
     const parts = key.split(':');
     if (parts.length < 3 || parts[1] !== n.last) continue;
@@ -164,7 +171,7 @@ function deliverToWaiters(key, result) {
 }
 
 /**
- * @param {object[]} queries  Unique professor queries (one per professorKey)
+ * @param {object[]} queries  Unique RMP identity keys (professor, or professor+course for initials)
  */
 async function fetchRmpBatchBackground(queries) {
   const awake = await wakeBackground();
@@ -223,10 +230,10 @@ export function queueLookup(query, onResult) {
  */
 function professorsNeedingRmpFetch(queries) {
   const out = [];
-  for (const q of dedupeQueriesByProfessor(queries)) {
-    const pk = professorKey(q.rawName);
-    if (!pk) continue;
-    if (getRmpProfessorCache(q.rawName)) continue;
+  for (const q of dedupeQueriesByRmpIdentity(queries)) {
+    const idKey = rmpCacheIdentityKey(q);
+    if (!idKey) continue;
+    if (getRmpProfessorCache(q)) continue;
     out.push(q);
   }
   return out;
@@ -249,11 +256,14 @@ async function flushBatch() {
   /** @type {Array<{ pk: string, rmpRes: object }>} */
   const newlyCachedProfessors = [];
 
-  for (const [pk, rmpRes] of Object.entries(rmpBatch)) {
+  for (const [idKey, rmpRes] of Object.entries(rmpBatch)) {
     if (shouldCacheRmpResult(rmpRes)) {
-      const queryForPk = queries.find((q) => professorKey(q.rawName) === pk);
-      storeRmpProfessorCache(queryForPk?.rawName || '', rmpRes);
-      newlyCachedProfessors.push({ pk, rmpRes: cloneResult(rmpRes) });
+      const queryForId =
+        needRmp.find((q) => rmpCacheIdentityKey(q) === idKey) ||
+        queries.find((q) => rmpCacheIdentityKey(q) === idKey);
+      if (queryForId) storeRmpProfessorCache(queryForId, rmpRes);
+      const pk = professorKey(queryForId?.rawName || '');
+      if (pk) newlyCachedProfessors.push({ pk, rmpRes: cloneResult(rmpRes) });
     }
   }
 
@@ -261,10 +271,10 @@ async function flushBatch() {
     const key = keys[i];
     const query = queries[i];
     try {
-      const pk = professorKey(query.rawName);
+      const idKey = rmpCacheIdentityKey(query);
       const rmpRes =
-        getRmpProfessorCache(query.rawName) ||
-        (pk && rmpBatch[pk]) ||
+        getRmpProfessorCache(query) ||
+        (idKey && rmpBatch[idKey]) ||
         { source: 'rmp', status: 'fetch_failed', confidence: 0, rmpFetchedIn: 'none' };
       const gradesRes = gradesByKey[key] || { status: 'no_match' };
       const merged = mergeResults(rmpRes, gradesRes, query.course);
@@ -285,13 +295,13 @@ async function flushBatch() {
  * @param {object[]} queries
  * @returns {object[]}
  */
-function dedupeQueriesByProfessor(queries) {
+function dedupeQueriesByRmpIdentity(queries) {
   const seen = new Set();
   const out = [];
   for (const q of queries) {
-    const pk = professorKey(q.rawName);
-    if (!pk || seen.has(pk)) continue;
-    seen.add(pk);
+    const idKey = rmpCacheIdentityKey(q);
+    if (!idKey || seen.has(idKey)) continue;
+    seen.add(idKey);
     out.push(q);
   }
   return out;

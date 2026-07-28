@@ -1,8 +1,8 @@
 // Background worker — network RMP + bundled GPA (grades data is large).
 
-import { professorKey } from '../core/blocks.js';
 import { getCached, setCached } from '../core/cache.js';
 import { lookupKey } from '../core/lookupKey.js';
+import { rmpCacheIdentityKey } from '../core/rmpIdentity.js';
 import { GradesProvider } from '../core/providers/gradesProvider.js';
 import { RmpProvider } from '../core/providers/rmpProvider.js';
 import { ensureRmpRequestHeaders } from './rmpNetRules.js';
@@ -51,10 +51,10 @@ ensureRmpRequestHeaders().catch((err) =>
  * @param {object} query
  */
 async function lookupRmp(query) {
-  const pk = professorKey(query.rawName);
-  if (!pk) return { source: 'rmp', status: 'no_match', confidence: 0 };
+  const cacheKey = rmpCacheIdentityKey(query);
+  if (!cacheKey) return { source: 'rmp', status: 'no_match', confidence: 0 };
 
-  const stored = await getCached(pk);
+  const stored = await getCached(cacheKey);
   if (stored?.status === 'ok' && typeof stored.overall === 'number') {
     const missingReviews =
       (stored.sampleSize || 0) > 0 &&
@@ -87,7 +87,7 @@ async function lookupRmp(query) {
   }
 
   if (result?.status === 'ok' && typeof result.overall === 'number') {
-    await setCached(pk, result);
+    await setCached(cacheKey, result);
   }
 
   return { ...result, rmpFetchedIn: 'background' };
@@ -120,19 +120,19 @@ async function handleGradesBatch(queries) {
 async function handleRmpBatch(queries) {
   const results = {};
   const seen = new Set();
-  /** @type {Array<{ pk: string, query: object }>} */
+  /** @type {Array<{ idKey: string, query: object }>} */
   const pending = [];
 
   for (const query of queries) {
-    const pk = professorKey(query.rawName);
-    if (!pk || seen.has(pk)) continue;
-    seen.add(pk);
-    pending.push({ pk, query });
+    const idKey = rmpCacheIdentityKey(query);
+    if (!idKey || seen.has(idKey)) continue;
+    seen.add(idKey);
+    pending.push({ idKey, query });
   }
 
   await Promise.all(
-    pending.map(async ({ pk, query }) => {
-      results[pk] = await lookupRmp(query);
+    pending.map(async ({ idKey, query }) => {
+      results[idKey] = await lookupRmp(query);
     })
   );
   return results;
