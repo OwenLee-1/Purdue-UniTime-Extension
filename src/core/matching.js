@@ -155,6 +155,7 @@ const DEPT_HINTS_BY_PREFIX = {
   ECON: ['economics', 'econ'],
   MGMT: ['management', 'mgmt'],
   AD: ['design', 'art'],
+  CHNS: ['chinese'],
 };
 
 /**
@@ -224,7 +225,9 @@ export function pickBestCandidate(rawName, candidates, options = {}) {
 
   const top = scored[0];
 
-  // A different person scoring just as high — ambiguous unless one has far more reviews.
+  // A different person scoring just as high — never guess by review popularity.
+  // Initial-only UniTime names ("H Wang") often match many people equally; picking
+  // the one with more reviews attributes the wrong professor (e.g. Aerospace over Chinese).
   const rival = scored.find((s) => s.c.legacyId !== top.c.legacyId && s.score >= top.score - 0.0001);
   if (rival) {
     const deptMatches = scored.filter((s) => departmentMatchesHints(s.c.department, deptHints));
@@ -234,11 +237,6 @@ export function pickBestCandidate(rawName, candidates, options = {}) {
       return { candidate: pick.c, confidence: pick.score, status: 'ok' };
     }
 
-    const topN = top.c.numRatings || 0;
-    const rivalN = rival.c.numRatings || 0;
-    if (topN >= 10 && topN >= rivalN * 2) {
-      return { candidate: top.c, confidence: top.score, status: 'ok' };
-    }
     return { candidate: null, confidence: top.score, status: 'ambiguous' };
   }
 
