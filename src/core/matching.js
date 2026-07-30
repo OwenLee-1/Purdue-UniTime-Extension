@@ -22,6 +22,8 @@ const PLACEHOLDER_NAMES = new Set(['staff', 'tba', 'tbd', 'to be announced', 'to
  * @property {string} first
  * @property {string} last
  * @property {boolean} isPlaceholder  True for "Staff"/"TBA" etc.
+ * @property {boolean} [firstIsCompressedInitials]  True when first is joined
+ *   initials from UniTime forms like "D L Johnstone" / "Johnstone, D.L.".
  */
 
 /**
@@ -34,6 +36,31 @@ function stripDiacritics(s) {
 }
 
 /**
+ * True when a first-name fragment is dotted initials like "d.l." / "d.l".
+ * @param {string} part
+ */
+function isDottedInitials(part) {
+  const compact = String(part || '').replace(/\s+/g, '');
+  return /^[a-z](?:\.[a-z])+\.?$/.test(compact);
+}
+
+/**
+ * @param {string[]} tokens
+ * @returns {{ first: string, firstIsCompressedInitials: boolean } | null}
+ */
+function compressInitialTokens(tokens) {
+  const letters = tokens
+    .map((w) => w.replace(/[^a-z]/g, ''))
+    .filter(Boolean);
+  if (letters.length < 2) return null;
+  if (!letters.every((w) => w.length <= 2)) return null;
+  return {
+    first: letters.map((w) => w[0] || '').join(''),
+    firstIsCompressedInitials: true,
+  };
+}
+
+/**
  * Turn a raw UniTime instructor string into clean name parts.
  * Handles "Last, First M." and "First Last" formats.
  * @param {string} raw
@@ -43,16 +70,30 @@ export function normalizeName(raw) {
   const cleaned = stripDiacritics(String(raw || '')).toLowerCase().trim();
 
   if (PLACEHOLDER_NAMES.has(cleaned)) {
-    return { first: '', last: '', isPlaceholder: true };
+    return { first: '', last: '', isPlaceholder: true, firstIsCompressedInitials: false };
   }
 
   // "Last, First" format.
   let first = '';
   let last = '';
+  let firstIsCompressedInitials = false;
   if (cleaned.includes(',')) {
     const [lastPart, firstPart = ''] = cleaned.split(',');
     last = lastPart.trim();
-    first = firstPart.trim();
+    const firstRaw = firstPart.trim();
+    if (isDottedInitials(firstRaw)) {
+      first = firstRaw.replace(/[^a-z]/g, '');
+      firstIsCompressedInitials = first.length > 1;
+    } else {
+      const tokens = firstRaw.split(/\s+/).filter(Boolean);
+      const compressed = compressInitialTokens(tokens);
+      if (compressed) {
+        first = compressed.first;
+        firstIsCompressedInitials = true;
+      } else {
+        first = tokens[0] || '';
+      }
+    }
   } else {
     // "First [Middle] Last" — take first word as first, last word as last.
     const words = cleaned.split(/\s+/).filter((w) => !TITLES.has(w));
@@ -66,11 +107,10 @@ export function normalizeName(raw) {
       // "P P Cunningham" / "D L Johnstone" — leading tokens are initials.
       const lastWord = words[words.length - 1];
       const leading = words.slice(0, -1);
-      const allInitials = leading.every((w) => w.replace(/[^a-z]/g, '').length <= 2);
-      if (allInitials) {
-        first = leading
-          .map((w) => w.replace(/[^a-z]/g, '')[0] || '')
-          .join('');
+      const compressed = compressInitialTokens(leading);
+      if (compressed) {
+        first = compressed.first;
+        firstIsCompressedInitials = true;
         last = lastWord.replace(/[^a-z]/g, '');
       } else {
         first = words[0];
@@ -80,10 +120,14 @@ export function normalizeName(raw) {
   }
 
   // Drop any leftover middle initials/punctuation from the first name.
-  first = first.split(/\s+/)[0]?.replace(/[^a-z]/g, '') || '';
+  if (!firstIsCompressedInitials) {
+    first = first.split(/\s+/)[0]?.replace(/[^a-z]/g, '') || '';
+  } else {
+    first = first.replace(/[^a-z]/g, '');
+  }
   last = last.replace(/[^a-z]/g, '');
 
-  return { first, last, isPlaceholder: false };
+  return { first, last, isPlaceholder: false, firstIsCompressedInitials };
 }
 
 /**
@@ -102,15 +146,28 @@ export function scoreMatch(a, b) {
     if (a.first === b.first) return 1.0;
     if (a.first[0] !== b.first[0]) return 0.4;
 
-    // Same starting letter — full first vs initial(s).
     const aInit = a.first.replace(/[^a-z]/g, '');
     const bInit = b.first.replace(/[^a-z]/g, '');
-    if (aInit.length > 1 && bInit.length > 1) return 0.85;
+    if (!aInit || !bInit) return 0.4;
+
+    // UniTime compressed initials ("dl" from "D L") are initial-only signals —
+    // match on the shared first character, never as a nickname prefix.
+    if (a.firstIsCompressedInitials || b.firstIsCompressedInitials) {
+      return aInit[0] === bInit[0] ? 0.85 : 0.4;
+    }
+
     if (aInit.length === 1 && bInit.length === 1) return aInit === bInit ? 0.85 : 0.4;
-    // One side is a single initial (or "pp") matching the other's prefix.
+
     const short = aInit.length <= bInit.length ? aInit : bInit;
     const long = aInit.length <= bInit.length ? bInit : aInit;
-    if (short && long.startsWith(short)) return 0.85;
+
+    // Single initial ↔ full first name.
+    if (short.length === 1 && long.startsWith(short)) return 0.85;
+
+    // Shared prefix for nicknames (Rob/Robert, Chris/Christopher). Require
+    // length >= 3 so two-letter names (Jo/John, Al/Alice, Ed/Edward) do not
+    // falsely match unrelated people who only share those letters.
+    if (short.length >= 3 && long.startsWith(short)) return 0.85;
     return 0.4;
   }
 
@@ -135,7 +192,7 @@ export function normalizeParts(firstName, lastName) {
     .toLowerCase()
     .trim()
     .replace(/[^a-z]/g, '');
-  return { first, last, isPlaceholder: false };
+  return { first, last, isPlaceholder: false, firstIsCompressedInitials: false };
 }
 
 /** Score at or above this means we're confident enough to show a badge. */
