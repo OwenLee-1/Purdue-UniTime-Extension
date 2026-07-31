@@ -149,12 +149,17 @@ const DEPT_HINTS_BY_PREFIX = {
   AAE: ['aerospace', 'astronautical', 'aa'],
   ME: ['mechanical'],
   ECE: ['electrical', 'ece'],
-  PHYS: ['physics', 'phys'],
-  CHEM: ['chemistry', 'chem'],
+  // Prefer "physics" over bare "phys" — "phys" is a substring of Physical Education.
+  PHYS: ['physics'],
+  // Purdue subject code is CHM (CHEM is unused on UniTime). Avoid bare "chem"
+  // so Chemical Engineering does not count as a Chemistry match.
+  CHM: ['chemistry'],
+  CHEM: ['chemistry'],
   BIOL: ['biology', 'biol'],
   ECON: ['economics', 'econ'],
   MGMT: ['management', 'mgmt'],
-  AD: ['design', 'art'],
+  // Avoid bare "art" — it is a substring of Earth / Cartography / Liberal Arts.
+  AD: ['design', 'art & design', 'art and design', 'fine arts'],
 };
 
 /**
