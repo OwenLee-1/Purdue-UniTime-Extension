@@ -3,7 +3,8 @@
 //
 // Unlike the RMP provider, this needs the COURSE (e.g. "MA 26100") in addition to
 // the instructor name, and the lookup is local (no network) — the data ships with
-// the extension. Matching on course + last name is highly accurate.
+// the extension. Matching prefers no GPA over attributing another instructor's
+// grades when multiple people share a last name in the same course.
 
 import { RatingProvider } from './Provider.js';
 import { normalizeName } from '../matching.js';
@@ -51,6 +52,15 @@ function isSingleEditAway(a, b) {
 }
 
 /**
+ * Bare last-name keys only (exclude `lastname:firstname` person keys).
+ * @param {Record<string, { gpa: number, n: number }>} byCourse
+ * @returns {string[]}
+ */
+function bareLastKeys(byCourse) {
+  return Object.keys(byCourse).filter((k) => !k.includes(':'));
+}
+
+/**
  * Pick one near last-name when UniTime and BoilerGrades disagree slightly
  * (e.g. "Weng" vs dataset "Wen", also "Wong" one edit away).
  * @param {string} last
@@ -58,7 +68,7 @@ function isSingleEditAway(a, b) {
  * @returns {string | null}
  */
 function pickNearLastName(last, byCourse) {
-  const near = Object.keys(byCourse).filter((k) => isSingleEditAway(last, k));
+  const near = bareLastKeys(byCourse).filter((k) => isSingleEditAway(last, k));
   if (near.length === 0) return null;
   if (near.length === 1) return near[0];
 
@@ -70,6 +80,44 @@ function pickNearLastName(last, byCourse) {
   const runner = near[1];
   if ((byCourse[top].n || 0) >= (byCourse[runner]?.n || 0) * 2) return top;
 
+  return null;
+}
+
+/**
+ * Resolve a grade record for course + normalized name parts.
+ * Shared last names are stored as `last:first` only; bare `last` means unique.
+ * @param {Record<string, { gpa: number, n: number, dist?: object }>} byCourse
+ * @param {string} last
+ * @param {string} first
+ * @returns {{ rec: { gpa: number, n: number, dist?: object }, confidence: number } | null}
+ */
+export function resolveGradeRecord(byCourse, last, first = '') {
+  if (!byCourse || !last) return null;
+
+  if (first && first.length > 1) {
+    const exact = byCourse[`${last}:${first}`];
+    if (exact) return { rec: exact, confidence: 0.9 };
+    // Full first name that is not in the dataset — do not fall back to a
+    // different person's bare last-name entry.
+    return null;
+  }
+
+  if (first && first.length === 1) {
+    const prefix = `${last}:`;
+    const hits = Object.keys(byCourse).filter((k) => {
+      if (!k.startsWith(prefix)) return false;
+      return k.slice(prefix.length).startsWith(first);
+    });
+    if (hits.length === 1) return { rec: byCourse[hits[0]], confidence: 0.85 };
+    if (hits.length > 1) return null;
+
+    // Unique last-name entry with no first-keyed aliases (empty first in source).
+    if (byCourse[last]) return { rec: byCourse[last], confidence: 0.85 };
+    return null;
+  }
+
+  // Last name only — safe solely when the dataset has a unique bare key.
+  if (byCourse[last]) return { rec: byCourse[last], confidence: 0.9 };
   return null;
 }
 
@@ -89,29 +137,27 @@ export class GradesProvider extends RatingProvider {
     const byCourse = GRADES[courseKey];
     if (!byCourse) return { source: 'grades', confidence: 0, status: 'no_match' };
 
-    const { last, isPlaceholder } = normalizeName(query.rawName);
+    const { first, last, isPlaceholder } = normalizeName(query.rawName);
     if (isPlaceholder || !last) return { source: 'grades', confidence: 0, status: 'no_match' };
 
-    let rec = byCourse[last];
-    let confidence = 0.9;
-
-    if (!rec) {
+    let resolved = resolveGradeRecord(byCourse, last, first);
+    if (!resolved) {
       const nearKey = pickNearLastName(last, byCourse);
       if (nearKey) {
-        rec = byCourse[nearKey];
-        confidence = 0.8;
+        resolved = resolveGradeRecord(byCourse, nearKey, first);
+        if (resolved) resolved = { ...resolved, confidence: Math.min(resolved.confidence, 0.8) };
       }
     }
 
-    if (!rec) return { source: 'grades', confidence: 0, status: 'no_match' };
+    if (!resolved) return { source: 'grades', confidence: 0, status: 'no_match' };
 
     return {
       source: 'grades',
-      confidence,
+      confidence: resolved.confidence,
       status: 'ok',
-      gpa: rec.gpa,
-      gpaSampleSize: rec.n,
-      gpaDistribution: rec.dist,
+      gpa: resolved.rec.gpa,
+      gpaSampleSize: resolved.rec.n,
+      gpaDistribution: resolved.rec.dist,
     };
   }
 }

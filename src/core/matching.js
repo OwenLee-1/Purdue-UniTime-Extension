@@ -152,7 +152,9 @@ const DEPT_HINTS_BY_PREFIX = {
   PHYS: ['physics', 'phys'],
   CHEM: ['chemistry', 'chem'],
   BIOL: ['biology', 'biol'],
-  ECON: ['economics', 'econ'],
+  // Do not use bare "econ" — it substring-matches "English As A Second Language"
+  // ("sECOnd"), which falsely prefers ESL professors on ECON courses.
+  ECON: ['economics'],
   MGMT: ['management', 'mgmt'],
   AD: ['design', 'art'],
 };
