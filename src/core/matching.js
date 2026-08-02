@@ -144,7 +144,9 @@ const CONFIDENCE_THRESHOLD = 0.8;
 /** @type {Record<string, string[]>} */
 const DEPT_HINTS_BY_PREFIX = {
   MA: ['mathematics', 'math'],
-  CS: ['computer science', 'computer', 'cs'],
+  // Do not use bare "computer" — it matches Computer Engineering, Computer
+  // Graphics, and Computer & Information Technology via substring includes().
+  CS: ['computer science', 'cs'],
   STAT: ['statistics', 'stat'],
   AAE: ['aerospace', 'astronautical', 'aa'],
   ME: ['mechanical'],
