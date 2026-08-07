@@ -141,19 +141,32 @@ export function normalizeParts(firstName, lastName) {
 /** Score at or above this means we're confident enough to show a badge. */
 const CONFIDENCE_THRESHOLD = 0.8;
 
-/** @type {Record<string, string[]>} */
+/**
+ * Department hint strings matched with includes(), unless prefixed with "="
+ * for an exact department-name match (after lowercasing/trim).
+ *
+ * Exact matches are required when a safe substring would also hit unrelated
+ * Purdue departments (e.g. bare "management" → Hospitality and Tourism
+ * Management / Construction Management Technology).
+ *
+ * @type {Record<string, string[]>}
+ */
 const DEPT_HINTS_BY_PREFIX = {
   MA: ['mathematics', 'math'],
   CS: ['computer science', 'computer', 'cs'],
   STAT: ['statistics', 'stat'],
   AAE: ['aerospace', 'astronautical', 'aa'],
-  ME: ['mechanical'],
-  ECE: ['electrical', 'ece'],
+  // Exact — "mechanical" also matches Mechanical Engineering Technology.
+  ME: ['=mechanical engineering'],
+  // Exact — bare "electrical" also matches Electrical Engineering Technology.
+  ECE: ['=electrical and computer engineering', '=electrical engineering', 'ece'],
   PHYS: ['physics', 'phys'],
   CHEM: ['chemistry', 'chem'],
-  BIOL: ['biology', 'biol'],
+  // Avoid bare "biol" — it matches Agricultural and Biological Engineering.
+  BIOL: ['biology', 'biological sciences'],
   ECON: ['economics', 'econ'],
-  MGMT: ['management', 'mgmt'],
+  // Exact "management" — bare substring hits Hospitality / Construction Management.
+  MGMT: ['=management', 'organization management'],
   AD: ['design', 'art'],
 };
 
@@ -174,8 +187,13 @@ export function departmentHintsFromCourse(course) {
  */
 function departmentMatchesHints(department, hints) {
   if (!hints.length) return false;
-  const d = String(department || '').toLowerCase();
-  return hints.some((h) => d.includes(h));
+  const d = String(department || '')
+    .toLowerCase()
+    .trim();
+  return hints.some((h) => {
+    if (h.startsWith('=')) return d === h.slice(1);
+    return d.includes(h);
+  });
 }
 
 /**
