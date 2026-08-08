@@ -17,30 +17,35 @@ import { summarizeReviewSentiment } from './compositeScore.js';
  * @property {boolean} hasEnoughForAverage
  */
 
-/** @type {Record<string, string[]>} */
+/**
+ * Subject aliases must be exact tokens/phrases (spaces stripped), never bare words that
+ * appear inside other departments (e.g. COMPUTER ⊂ COMPUTER ENGINEERING).
+ * @type {Record<string, string[]>}
+ */
 const SUBJECT_ALIASES = {
   MA: ['MA', 'MATH', 'MATHEMATICS', 'MAT'],
-  CS: ['CS', 'COMP', 'COMPSCI', 'COMPUTER', 'CSC'],
+  // Bare COMPUTER is safe: multi-word tags become one token (COMPUTERENGINEERING).
+  CS: ['CS', 'COMP', 'COMPSCI', 'COMPUTER', 'COMPUTERSCIENCE', 'CSC'],
   STAT: ['STAT', 'STATISTICS'],
-  AAE: ['AAE', 'AERO', 'AEROSPACE'],
-  ME: ['ME', 'MECH', 'MECHANICAL'],
-  ECE: ['ECE', 'EE', 'ELECTRICAL'],
+  AAE: ['AAE', 'AERO', 'AEROSPACE', 'AEROSPACEENGINEERING'],
+  ME: ['ME', 'MECH', 'MECHANICAL', 'MECHANICALENGINEERING'],
+  ECE: ['ECE', 'EE', 'ELECTRICAL', 'ELECTRICALENGINEERING', 'ELECTRICALANDCOMPUTERENGINEERING'],
   PHYS: ['PHYS', 'PHYSICS'],
   CHM: ['CHM', 'CHEM', 'CHEMISTRY'],
   CHEM: ['CHM', 'CHEM', 'CHEMISTRY'],
-  BIOL: ['BIOL', 'BIO', 'BIOLOGY'],
+  BIOL: ['BIOL', 'BIO', 'BIOLOGY', 'BIOLOGICALSCIENCES'],
   ECON: ['ECON', 'ECONOMICS'],
   MGMT: ['MGMT', 'MANAGEMENT', 'MGT'],
-  AD: ['AD', 'DESIGN'],
+  AD: ['AD', 'DESIGN', 'ARTDESIGN', 'ARTANDDESIGN', 'VISUALCOMMUNICATIONDESIGN'],
   ENGR: ['ENGR', 'ENGINEERING'],
-  EAPS: ['EAPS', 'GEOL', 'EARTH'],
+  EAPS: ['EAPS', 'GEOL', 'EARTH', 'EARTHATMOSPHERICANDPLANETARYSCIENCES'],
   PSY: ['PSY', 'PSYCH', 'PSYCHOLOGY'],
   ENGL: ['ENGL', 'ENGLISH'],
   COM: ['COM', 'COMM', 'COMMUNICATION'],
   MKT: ['MKT', 'MKTG', 'MARKETING'],
   FIN: ['FIN', 'FINANCE'],
-  IE: ['IE', 'INDE', 'INDUSTRIAL'],
-  CE: ['CE', 'CIVL', 'CIVIL'],
+  IE: ['IE', 'INDE', 'INDUSTRIAL', 'INDUSTRIALENGINEERING'],
+  CE: ['CE', 'CIVL', 'CIVIL', 'CIVILENGINEERING'],
 };
 
 const MIN_COURSE_RMP_RATINGS = 3;
@@ -53,13 +58,24 @@ function courseNumberVariants(courseNumber) {
   const n = String(courseNumber || '').replace(/\D/g, '');
   if (!n) return [];
   const variants = new Set([n]);
+  // Purdue undergrad numbers are often 5 digits ending in 00; RMP commonly uses the
+  // 3-digit stem (18000 ↔ 180). Do not bridge via 4-digit forms (18000 ↮ 1800).
   if (n.length === 5 && n.endsWith('00')) {
     variants.add(n.slice(0, 3));
-    variants.add(n.slice(0, 4));
   }
   if (n.length === 3) variants.add(`${n}00`);
-  if (n.length === 4 && n.endsWith('0')) variants.add(n.slice(0, 3));
   return [...variants].filter(Boolean);
+}
+
+/**
+ * Normalize a subject token/phrase: strip non-letters and uppercase.
+ * "Computer Science" → "COMPUTERSCIENCE"
+ * @param {string} value
+ */
+function normalizeSubjectToken(value) {
+  return String(value || '')
+    .toUpperCase()
+    .replace(/[^A-Z]/g, '');
 }
 
 /**
@@ -69,18 +85,30 @@ function courseNumberVariants(courseNumber) {
 function parseRmpClass(rmpClass) {
   const raw = String(rmpClass || '').toUpperCase();
   const compact = raw.replace(/[^A-Z0-9&]/g, '');
-  const numbers = (raw.match(/\d{2,5}/g) || []).flatMap((n) => courseNumberVariants(n));
-  const subjects = (raw.match(/[A-Z&]{2,}/g) || [])
-    .map((s) => s.replace(/&/g, ''))
-    .filter((s) => !/^\d+$/.test(s));
+  /** @type {Set<string>} */
+  const subjects = new Set();
+  /** @type {Set<string>} */
+  const numbers = new Set();
+
+  // Take the letter/word run immediately before each number as one subject phrase.
+  // "COMPUTER ENGINEERING 180" → COMPUTERENGINEERING (not COMPUTER + ENGINEERING).
+  const prefixed = /([A-Z][A-Z\s&]*?)(\d{2,5})/g;
+  let match;
+  while ((match = prefixed.exec(raw)) !== null) {
+    const subject = normalizeSubjectToken(match[1]);
+    if (subject.length >= 2) subjects.add(subject);
+    for (const variant of courseNumberVariants(match[2])) numbers.add(variant);
+  }
+
   if (compact) {
     const m = compact.match(/^([A-Z&]{2,})(\d{2,5})/);
     if (m) {
-      subjects.push(m[1].replace(/&/g, ''));
-      numbers.push(...courseNumberVariants(m[2]));
+      subjects.add(normalizeSubjectToken(m[1]));
+      for (const variant of courseNumberVariants(m[2])) numbers.add(variant);
     }
   }
-  return { subjects: [...new Set(subjects)], numbers: [...new Set(numbers)] };
+
+  return { subjects: [...subjects], numbers: [...numbers] };
 }
 
 /**
@@ -89,13 +117,16 @@ function parseRmpClass(rmpClass) {
  */
 function subjectsCompatible(subjectCode, rmpSubject) {
   if (!subjectCode || !rmpSubject) return false;
-  if (subjectCode === rmpSubject) return true;
-  if (rmpSubject.startsWith(subjectCode) || subjectCode.startsWith(rmpSubject)) return true;
-  const left = SUBJECT_ALIASES[subjectCode] || [subjectCode];
-  const right = SUBJECT_ALIASES[rmpSubject] || [rmpSubject];
-  return left.some((a) =>
-    right.some((b) => a === b || a.startsWith(b) || b.startsWith(a))
-  );
+  const leftCode = normalizeSubjectToken(subjectCode);
+  const rightCode = normalizeSubjectToken(rmpSubject);
+  if (!leftCode || !rightCode) return false;
+  if (leftCode === rightCode) return true;
+
+  const left = (SUBJECT_ALIASES[subjectCode] || [subjectCode]).map(normalizeSubjectToken);
+  // RMP side is a parsed phrase (e.g. COMPUTERSCIENCE), not a UniTime code — compare
+  // against that token directly plus any aliases if the token happens to be a known code.
+  const right = (SUBJECT_ALIASES[rmpSubject] || [rmpSubject]).map(normalizeSubjectToken);
+  return left.some((a) => right.some((b) => a === b));
 }
 
 /**
@@ -114,7 +145,8 @@ export function courseMatchesRmpClass(courseKey, rmpClass) {
   const numberHit = parsed.numbers.some((n) => numberVariants.includes(n));
   if (!numberHit) return false;
 
-  if (!parsed.subjects.length) return numberHit;
+  // Number-only RMP class tags are too ambiguous across departments.
+  if (!parsed.subjects.length) return false;
 
   return parsed.subjects.some((s) => subjectsCompatible(subject, s));
 }
