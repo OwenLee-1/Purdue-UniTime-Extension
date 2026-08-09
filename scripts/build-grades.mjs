@@ -26,13 +26,101 @@ const POINTS = {
   E: 0.0, F: 0.0,
 };
 
+/**
+ * Split a delimited line, honoring RFC4180-style double quotes so values like
+ * `"Hassan, Hashim"` stay as one field in comma-separated BoilerGrades files.
+ * @param {string} line
+ * @param {string} delimiter
+ * @returns {string[]}
+ */
+export function splitDelimitedLine(line, delimiter) {
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  const text = String(line ?? '');
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '"') {
+      if (inQuotes && text[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+    if (ch === delimiter && !inQuotes) {
+      out.push(cur);
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
+/**
+ * Headerless Fall 2023-style rows:
+ *   Term;Subject;Number;Title;Instructor;A%;B%;C%;D%;F%;W%
+ * @param {string[]} fields
+ */
+export function looksLikeHeaderlessTermRow(fields) {
+  if (!Array.isArray(fields) || fields.length < 11) return false;
+  const term = (fields[0] || '').trim();
+  const subject = (fields[1] || '').trim();
+  const number = (fields[2] || '').trim();
+  const instructor = (fields[4] || '').trim();
+  if (!/^(fall|spring|summer)\s+\d{4}$/i.test(term)) return false;
+  if (!/^[A-Z]{2,10}$/i.test(subject)) return false;
+  if (!/^\d{3,5}$/.test(number)) return false;
+  if (!instructor.includes(',')) return false;
+  return true;
+}
+
+/**
+ * Decide delimiter + whether the first row is a header for a BoilerGrades CSV.
+ * Supports:
+ * - semicolon header files (fall2024+, spring*, summer*)
+ * - comma header files with quoted instructor names (fall2021)
+ * - headerless semicolon term rows (fall2023)
+ * @param {string} firstLine
+ */
+export function detectCsvFormat(firstLine) {
+  const semi = splitDelimitedLine(firstLine, ';').map((c) => c.trim());
+  const comma = splitDelimitedLine(firstLine, ',').map((c) => c.trim());
+
+  if (semi.includes('Subject') && semi.includes('Course Number') && semi.includes('Instructor')) {
+    return { delimiter: ';', headerless: false };
+  }
+  if (comma.includes('Subject') && comma.includes('Course Number') && comma.includes('Instructor')) {
+    return { delimiter: ',', headerless: false };
+  }
+  if (looksLikeHeaderlessTermRow(semi)) {
+    return { delimiter: ';', headerless: true };
+  }
+  return null;
+}
+
+/** Fixed column map for headerless Term;Subject;Number;Title;Instructor;A%;B%;C%;D%;F%;W% rows. */
+export const HEADERLESS_COL_OF = {
+  Subject: 1,
+  'Course Number': 2,
+  Instructor: 4,
+  A: 5,
+  B: 6,
+  C: 7,
+  D: 8,
+  F: 9,
+};
+
 function parsePct(v) {
   if (!v) return 0;
   const n = parseFloat(String(v).replace('%', '').trim());
   return Number.isFinite(n) ? n : 0;
 }
 
-function lastNameKey(instructor) {
+export function lastNameKey(instructor) {
   // Instructor is "Last, First M." — take the part before the comma.
   const last = String(instructor || '').split(',')[0] || '';
   return last
@@ -77,8 +165,8 @@ function sectionDistribution(row, colOf) {
       if (idx === undefined) continue;
       const pct = parsePct(row[idx]);
       raw[bucket] += pct;
-      total += pct;
     }
+    total += raw[bucket];
   }
   if (total <= 0) return null;
   const norm = {};
@@ -86,47 +174,50 @@ function sectionDistribution(row, colOf) {
   return norm;
 }
 
-async function listCsvFiles() {
-  const res = await fetch(TREE_URL);
-  if (!res.ok) throw new Error(`tree fetch ${res.status}`);
-  const data = await res.json();
-  return data.tree
-    .filter((t) => t.type === 'blob' && /\.csv$/i.test(t.path) && !/_db\.csv$/i.test(t.path))
-    .map((t) => t.path);
-}
+/**
+ * Parse one BoilerGrades CSV text into the accumulator map.
+ * @param {string} path label for warnings
+ * @param {string} text
+ * @param {Record<string, Record<string, any>>} acc
+ * @returns {{ processed: number, skipped: boolean, reason?: string }}
+ */
+export function ingestCsvText(path, text, acc) {
+  const lines = String(text || '')
+    .split(/\r?\n/)
+    .filter((l) => l.trim().length);
+  if (!lines.length) return { processed: 0, skipped: true, reason: 'empty' };
 
-function splitCsvLine(line) {
-  return line.split(';');
-}
-
-async function processCsv(path, acc) {
-  const res = await fetch(RAW(path));
-  if (!res.ok) {
-    console.warn(`skip ${path}: ${res.status}`);
-    return;
+  const format = detectCsvFormat(lines[0]);
+  if (!format) {
+    return { processed: 0, skipped: true, reason: 'unrecognized format' };
   }
-  const text = await res.text();
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length);
-  if (!lines.length) return;
 
-  const header = splitCsvLine(lines[0]);
-  const colOf = {};
-  header.forEach((name, i) => {
-    colOf[name.trim()] = i;
-  });
+  let colOf;
+  let startRow;
+  if (format.headerless) {
+    colOf = { ...HEADERLESS_COL_OF };
+    startRow = 0;
+  } else {
+    const header = splitDelimitedLine(lines[0], format.delimiter);
+    colOf = {};
+    header.forEach((name, i) => {
+      colOf[name.trim()] = i;
+    });
+    startRow = 1;
+  }
 
   const iSubject = colOf['Subject'];
   const iNumber = colOf['Course Number'];
   const iInstructor = colOf['Instructor'];
   if (iSubject === undefined || iNumber === undefined || iInstructor === undefined) {
-    console.warn(`skip ${path}: missing key columns`);
-    return;
+    return { processed: 0, skipped: true, reason: 'missing key columns' };
   }
 
   let lastCourse = '';
   let lastNum = '';
-  for (let r = 1; r < lines.length; r++) {
-    const row = splitCsvLine(lines[r]);
+  let processed = 0;
+  for (let r = startRow; r < lines.length; r++) {
+    const row = splitDelimitedLine(lines[r], format.delimiter);
     // The CSV omits repeated Subject/Course on continuation rows, so carry forward.
     const subject = (row[iSubject] || '').trim() || lastCourse;
     const number = (row[iNumber] || '').trim() || lastNum;
@@ -152,7 +243,34 @@ async function processCsv(path, acc) {
     rec.sum += gpa;
     rec.n += 1;
     if (dist) for (const k of Object.keys(rec.dist)) rec.dist[k] += dist[k];
+    processed++;
   }
+
+  return { processed, skipped: false };
+}
+
+async function listCsvFiles() {
+  const res = await fetch(TREE_URL);
+  if (!res.ok) throw new Error(`tree fetch ${res.status}`);
+  const data = await res.json();
+  return data.tree
+    .filter((t) => t.type === 'blob' && /\.csv$/i.test(t.path) && !/_db\.csv$/i.test(t.path))
+    .map((t) => t.path);
+}
+
+async function processCsv(path, acc) {
+  const res = await fetch(RAW(path));
+  if (!res.ok) {
+    console.warn(`skip ${path}: ${res.status}`);
+    return;
+  }
+  const text = await res.text();
+  const result = ingestCsvText(path, text, acc);
+  if (result.skipped) {
+    console.warn(`skip ${path}: ${result.reason}`);
+    return;
+  }
+  console.log(`  → ${result.processed} sections`);
 }
 
 async function main() {
@@ -201,7 +319,10 @@ async function main() {
   console.log(`Output: ${outPath}`);
 }
 
-main().catch((err) => {
-  console.error(err);
-  process.exit(1);
-});
+const isMain = process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1];
+if (isMain) {
+  main().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
+}
