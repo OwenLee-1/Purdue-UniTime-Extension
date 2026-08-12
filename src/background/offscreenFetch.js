@@ -1,8 +1,25 @@
 // Offscreen document fallback for RMP GraphQL when service-worker fetch fails.
+//
+// Chrome requires a static HTML page URL for offscreen documents — never pass a
+// CRXJS `?script` loader (that emits a .js asset and createDocument fails).
 
-import offscreenUrl from '../offscreen/index.html?script';
+/** Extension-relative path emitted by the Vite/CRX build (see vite.config.js). */
+export const OFFSCREEN_DOCUMENT_PATH = 'src/offscreen/index.html';
 
 let creatingOffscreen = null;
+
+/**
+ * Resolve the offscreen HTML URL for chrome.offscreen.createDocument.
+ * @param {{ getURL?: (path: string) => string } | undefined} runtime
+ * @returns {string}
+ */
+export function resolveOffscreenDocumentUrl(runtime) {
+  const rt = runtime ?? (typeof globalThis.chrome !== 'undefined' ? globalThis.chrome.runtime : undefined);
+  if (typeof rt?.getURL !== 'function') {
+    throw new Error('chrome.runtime.getURL unavailable');
+  }
+  return rt.getURL(OFFSCREEN_DOCUMENT_PATH);
+}
 
 export async function ensureOffscreenDocument() {
   if (creatingOffscreen) return creatingOffscreen;
@@ -14,7 +31,7 @@ export async function ensureOffscreenDocument() {
     if (existing.length) return;
 
     await chrome.offscreen.createDocument({
-      url: offscreenUrl,
+      url: resolveOffscreenDocumentUrl(),
       reasons: ['DOM_SCRAPING'],
       justification: 'Fetch RMP ratings and summarize review text with Chrome built-in AI',
     });
