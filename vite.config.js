@@ -11,4 +11,14 @@ import manifest from './manifest.json';
 //   npm run build  -> makes a final "dist/" folder to load into Chrome
 export default defineConfig({
   plugins: [crx({ manifest })],
+  // Offscreen HTML is not listed in manifest.json (Chrome loads it via
+  // chrome.offscreen.createDocument). Keep it as an explicit Rollup input so
+  // dist/src/offscreen/index.html and its module graph are always emitted.
+  build: {
+    rollupOptions: {
+      input: {
+        offscreen: 'src/offscreen/index.html',
+      },
+    },
+  },
 });
