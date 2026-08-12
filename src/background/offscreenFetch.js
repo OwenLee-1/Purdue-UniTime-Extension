@@ -13,11 +13,12 @@ let creatingOffscreen = null;
  * @param {{ getURL?: (path: string) => string } | undefined} runtime
  * @returns {string}
  */
-export function resolveOffscreenDocumentUrl(runtime = chrome?.runtime) {
-  if (typeof runtime?.getURL !== 'function') {
+export function resolveOffscreenDocumentUrl(runtime) {
+  const rt = runtime ?? (typeof globalThis.chrome !== 'undefined' ? globalThis.chrome.runtime : undefined);
+  if (typeof rt?.getURL !== 'function') {
     throw new Error('chrome.runtime.getURL unavailable');
   }
-  return runtime.getURL(OFFSCREEN_DOCUMENT_PATH);
+  return rt.getURL(OFFSCREEN_DOCUMENT_PATH);
 }
 
 export async function ensureOffscreenDocument() {

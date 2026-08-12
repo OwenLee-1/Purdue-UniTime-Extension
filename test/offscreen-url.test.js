@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
@@ -32,12 +32,37 @@ test('resolveOffscreenDocumentUrl uses chrome.runtime.getURL for the HTML path',
 
 test('offscreenFetch source never imports HTML via CRXJS ?script', () => {
   const source = readFileSync(join(root, 'src/background/offscreenFetch.js'), 'utf8');
-  assert.doesNotMatch(source, /\?script/);
-  assert.match(source, /chrome\.runtime\.getURL|resolveOffscreenDocumentUrl/);
+  assert.doesNotMatch(source, /from\s+['"][^'"]*\?script['"]/);
+  assert.doesNotMatch(source, /import\s+[^;]*\?script/);
+  assert.match(source, /resolveOffscreenDocumentUrl/);
+  assert.match(source, /OFFSCREEN_DOCUMENT_PATH/);
 });
 
 test('source offscreen HTML exists for createDocument', () => {
   assert.equal(existsSync(join(root, OFFSCREEN_DOCUMENT_PATH)), true);
   const html = readFileSync(join(root, OFFSCREEN_DOCUMENT_PATH), 'utf8');
   assert.match(html, /offscreen\.js/);
+});
+
+test('built service worker createDocument URL is HTML when dist exists', () => {
+  const distAssets = join(root, 'dist/assets');
+  if (!existsSync(distAssets)) return;
+
+  const swFiles = readdirSync(distAssets).filter(
+    (name) => name.startsWith('service-worker.js-') && name.endsWith('.js')
+  );
+  assert.ok(swFiles.length > 0, 'expected built service-worker chunk');
+
+  for (const name of swFiles) {
+    const source = readFileSync(join(distAssets, name), 'utf8');
+    assert.match(source, /createDocument/);
+    assert.doesNotMatch(
+      source,
+      /createDocument\(\{url:"[^"]*\.js"/,
+      `${name} must not pass a .js asset to createDocument`
+    );
+    assert.doesNotMatch(source, /index\.html-loader-/);
+  }
+
+  assert.equal(existsSync(join(root, 'dist', OFFSCREEN_DOCUMENT_PATH)), true);
 });
