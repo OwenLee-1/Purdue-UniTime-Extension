@@ -21,9 +21,16 @@ const RMP_AUTH_HEADER = 'Basic dGVzdDp0ZXN0';
 // Purdue University - West Lafayette. (Base64 of "School-783".)
 const PURDUE_SCHOOL_ID = 'U2Nob29sLTc4Mw==';
 
-const TEACHER_SEARCH_QUERY = `query TeacherSearch($text: String!, $schoolID: ID!) {
+// RMP's teachers connection defaults to ~8–10 rows when `first` is omitted.
+// Common Purdue last names (Wang, Lee, Kim, Li, Zhang, …) have far more
+// faculty than that, so a truncated page can contain exactly one same-initial
+// match and pickBestCandidate will treat it as unique — attributing the wrong
+// professor. 200 exhausts current Purdue result sets for those names.
+export const TEACHER_SEARCH_PAGE_SIZE = 200;
+
+const TEACHER_SEARCH_QUERY = `query TeacherSearch($text: String!, $schoolID: ID!, $first: Int) {
   newSearch {
-    teachers(query: { text: $text, schoolID: $schoolID }) {
+    teachers(query: { text: $text, schoolID: $schoolID }, first: $first) {
       edges {
         node {
           firstName
@@ -240,7 +247,7 @@ export class RmpProvider extends RatingProvider {
       },
       body: JSON.stringify({
         query: TEACHER_SEARCH_QUERY,
-        variables: { text, schoolID: PURDUE_SCHOOL_ID },
+        variables: { text, schoolID: PURDUE_SCHOOL_ID, first: TEACHER_SEARCH_PAGE_SIZE },
       }),
     });
 
@@ -259,4 +266,4 @@ export class RmpProvider extends RatingProvider {
   }
 }
 
-export { RMP_GRAPHQL_URL, RMP_AUTH_HEADER, PURDUE_SCHOOL_ID };
+export { RMP_GRAPHQL_URL, RMP_AUTH_HEADER, PURDUE_SCHOOL_ID, TEACHER_SEARCH_QUERY };
