@@ -23,7 +23,11 @@
     },
     "condition": {
       "urlFilter": "||ratemyprofessors.com/graphql",
-      "resourceTypes": ["xmlhttprequest", "other"]
+      "resourceTypes": ["xmlhttprequest", "other"],
+      "excludedInitiatorDomains": [
+        "ratemyprofessors.com",
+        "www.ratemyprofessors.com"
+      ]
     }
   }
 ]
