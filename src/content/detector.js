@@ -93,13 +93,66 @@ function looksLikeCourseTitle(text) {
 }
 
 /**
+ * Extension nodes appended into an instructor cell. Their text must not be
+ * treated as part of the person's name (the Best chip is "✓ Best").
+ * @param {Node} node
+ */
+function isExtensionDecoration(node) {
+  if (!node || node.nodeType !== 1) return false;
+  if (typeof node.classList?.contains === 'function') {
+    if (node.classList.contains('rmp-best-chip') || node.classList.contains('rmp-badge-host')) {
+      return true;
+    }
+  }
+  const raw = node.className;
+  const text = typeof raw === 'string' ? raw : '';
+  return text.split(/\s+/).some((c) => c === 'rmp-best-chip' || c === 'rmp-badge-host');
+}
+
+/**
+ * @param {Node} node
+ * @returns {Element | null}
+ */
+function findInstructorAnchor(node) {
+  if (!node || node.nodeType !== 1 || isExtensionDecoration(node)) return null;
+  const tag = String(node.tagName || '').toUpperCase();
+  const href = typeof node.getAttribute === 'function' ? node.getAttribute('href') : '';
+  if (tag === 'A' && href) return /** @type {Element} */ (node);
+  for (const child of node.childNodes || []) {
+    const found = findInstructorAnchor(child);
+    if (found) return found;
+  }
+  return null;
+}
+
+/**
+ * textContent equivalent that skips extension chrome inside the cell.
+ * @param {Node} node
+ */
+function collectCellText(node) {
+  if (!node || isExtensionDecoration(node)) return '';
+  if (node.nodeType === 3) return node.nodeValue || '';
+  if (node.nodeType !== 1) return '';
+  let out = '';
+  for (const child of node.childNodes || []) out += collectCellText(child);
+  return out;
+}
+
+/**
  * Prefer link text inside UniTime instructor cells when present.
+ * Plain-text cells are common (GWT Label, no anchor). The comparison "✓ Best"
+ * chip is appended into that same cell, so a raw textContent read becomes
+ * "S Weng✓ Best" and no longer matches the professor. Block/unhide then skips
+ * the row and a hidden section stays off the schedule.
  * @param {Element} cell
  */
-function readInstructorCellText(cell) {
-  const link = cell.querySelector('a[href]');
-  if (link?.textContent?.trim()) return link.textContent.trim();
-  return (cell.textContent || '').trim();
+export function readInstructorCellText(cell) {
+  const link = findInstructorAnchor(cell);
+  if (link) {
+    const linked = collectCellText(link).trim();
+    if (linked) return linked;
+  }
+  return collectCellText(cell).trim();
 }
 
 /**
@@ -143,7 +196,7 @@ function findScheduleTables() {
 /**
  * @param {string} text
  */
-function looksLikeInstructorName(text) {
+export function looksLikeInstructorName(text) {
   const t = text
     .trim()
     .replace(/\s*\([^)]*\)\s*/g, ' ')
