@@ -172,18 +172,93 @@ function looksLikeInstructorName(text) {
 }
 
 /**
- * @param {string} text
- * @returns {string}
+ * UniTime's default enrollment format is initial-last ("S Weng", "D L Johnstone").
+ * InstructorCell joins every instructor in the cell with ", " (a nbsp in the HTML).
+ * @param {string} part
+ * @returns {boolean}
  */
-function primaryInstructorText(text) {
-  const parts = String(text || '')
+function isInitialLastPerson(part) {
+  const words = String(part || '')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length < 2) return false;
+  const last = words[words.length - 1].replace(/\./g, '');
+  if (!/^[A-Za-z][A-Za-z'-]+$/.test(last)) return false;
+  return words.slice(0, -1).every((w) => /^[A-Za-z]\.?$/.test(w));
+}
+
+/**
+ * Split a UniTime instructor cell into people.
+ * "S Weng, J Smith" is two people. "Doe, Jane M." and "Weng, S" stay one person.
+ * "Weng, S, Smith, J" is two Last, First people.
+ * @param {string} text
+ * @returns {string[] | null}
+ */
+function splitCommaSeparatedPeople(text) {
+  const parts = text
+    .split(',')
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (parts.length < 2) return null;
+
+  if (parts.every(isInitialLastPerson)) return parts;
+
+  const initialLast = parts.filter(isInitialLastPerson);
+  if (initialLast.length >= 1 && initialLast.length < parts.length) return initialLast;
+
+  if (parts.length >= 4 && parts.length % 2 === 0) {
+    /** @type {string[]} */
+    const paired = [];
+    for (let i = 0; i < parts.length; i += 2) {
+      const last = parts[i];
+      const first = parts[i + 1];
+      if (!/^[A-Za-z][A-Za-z'-]+$/.test(last)) return null;
+      if (!/^[A-Za-z][A-Za-z.'\- ]*$/.test(first)) return null;
+      paired.push(`${last}, ${first}`);
+    }
+    return paired;
+  }
+
+  return null;
+}
+
+/**
+ * @param {string} text
+ * @returns {string[]}
+ */
+function instructorCandidates(text) {
+  const normalized = String(text || '')
+    .replace(/\u00a0/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!normalized) return [];
+
+  const semi = normalized
     .split(/[;\n]/)
     .map((p) => p.trim())
     .filter(Boolean);
-  for (const part of parts) {
+  const chunks = semi.length > 1 ? semi : [normalized];
+  /** @type {string[]} */
+  const out = [];
+  for (const chunk of chunks) {
+    const people = splitCommaSeparatedPeople(chunk);
+    if (people) out.push(...people);
+    else out.push(chunk);
+  }
+  return out;
+}
+
+/**
+ * @param {string} text
+ * @returns {string}
+ */
+export function primaryInstructorText(text) {
+  const candidates = instructorCandidates(text);
+  for (const part of candidates) {
     if (looksLikeInstructorName(part)) return part;
   }
-  return (parts[0] || text).trim();
+  return (candidates[0] || String(text || '')).trim();
 }
 
 /**
