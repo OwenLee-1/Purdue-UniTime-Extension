@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "build:grades": "node scripts/build-grades.mjs"
+    "build:grades": "node scripts/build-grades.mjs",
+    "test": "node --test test/*.test.js"
   },
   "devDependencies": {
     "@crxjs/vite-plugin": "^2.0.0",
