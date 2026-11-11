@@ -97,6 +97,19 @@ function isSwallowingGesture(e) {
   return false;
 }
 
+/**
+ * End the tracked pointer gesture. Must run inside the capture handler that
+ * may stopImmediatePropagation — a later listener on the same path never runs
+ * after that, and the pointer id would keep swallowing UniTime clicks forever.
+ * @param {Event} e
+ */
+function releaseFinishedPointer(e) {
+  if (e.type !== 'pointerup' && e.type !== 'pointercancel') return;
+  if (swallowPointerId === null || !('pointerId' in e) || e.pointerId !== swallowPointerId) return;
+  swallowPointerId = null;
+  extendGestureSwallow();
+}
+
 function installCaptureGuard() {
   if (captureGuardInstalled) return;
   captureGuardInstalled = true;
@@ -104,26 +117,6 @@ function installCaptureGuard() {
     document.addEventListener(type, onFreezeCapture, true);
     window.addEventListener(type, onFreezeCapture, true);
   }
-  document.addEventListener(
-    'pointerup',
-    (e) => {
-      if (swallowPointerId !== null && e.pointerId === swallowPointerId) {
-        swallowPointerId = null;
-        extendGestureSwallow();
-      }
-    },
-    true
-  );
-  document.addEventListener(
-    'pointercancel',
-    (e) => {
-      if (swallowPointerId !== null && e.pointerId === swallowPointerId) {
-        swallowPointerId = null;
-        extendGestureSwallow();
-      }
-    },
-    true
-  );
   document.addEventListener('keydown', onFreezeKeydown, true);
 }
 
@@ -175,6 +168,10 @@ function onFreezeKeydown(e) {
 
 /** @param {Event} e */
 function onFreezeCapture(e) {
+  // Clear before any stopImmediatePropagation below. Window capture runs first;
+  // stopping there used to skip the document listener that dropped the pointer id.
+  releaseFinishedPointer(e);
+
   const frozen = activeReasons.size > 0;
   const swallowing = isSwallowingGesture(e);
   if (!frozen && !swallowing) return;
