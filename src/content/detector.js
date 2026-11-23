@@ -323,6 +323,12 @@ function scanOnce(onFound) {
   }
 }
 
+/** @type {Record<string, { rawName: string }> | null} */
+let activeBlocksMap = null;
+
+/** @type {((rawName: string) => string) | null} */
+let activeKeyFor = null;
+
 /**
  * @param {(candidate: InstructorCandidate) => void} onFound
  * @returns {() => void}
@@ -333,7 +339,15 @@ export function startDetector(onFound) {
   let timer = null;
   const observer = new MutationObserver(() => {
     if (timer) clearTimeout(timer);
-    timer = setTimeout(() => scanOnce(onFound), 300);
+    timer = setTimeout(() => {
+      timer = null;
+      scanOnce(onFound);
+      // WebTable.setData rewrites cell HTML but keeps the <tr>, including an
+      // inline display:none from an earlier hide. Re-match the current name.
+      if (activeBlocksMap && activeKeyFor) {
+        applyBlockVisibility(activeBlocksMap, activeKeyFor);
+      }
+    }, 300);
   });
 
   observer.observe(document.body, { childList: true, subtree: true });
@@ -349,6 +363,8 @@ export function startDetector(onFound) {
  * @param {(rawName: string) => string} keyFor
  */
 export function applyBlockVisibility(blocksMap, keyFor) {
+  activeBlocksMap = blocksMap;
+  activeKeyFor = keyFor;
   for (const table of findScheduleTables()) {
     const instructorIdx = getColumnIndex(table, 'Instructor');
     if (instructorIdx < 0) continue;
